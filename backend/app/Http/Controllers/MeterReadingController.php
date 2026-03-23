@@ -13,9 +13,11 @@ class MeterReadingController extends Controller
     public function __construct(private readonly AuditService $audit) {}
 
     /**
-     * Save closing readings for a nozzle.
-     * The opening readings were pre-seeded when the shift was opened.
-     * Immediately updates nozzle's last_* so the next shift gets correct openings.
+     * Save closing readings for a nozzle in a shift.
+     *
+     * Opening values are derived from the previous shift's closing reading for
+     * the same nozzle — making the shift chain self-consistent and removing
+     * reliance on manually-set nozzle.last_* fields as source of truth.
      */
     public function store(Request $request, Shift $shift)
     {
@@ -28,53 +30,44 @@ class MeterReadingController extends Controller
             'closing_shs'        => 'nullable|numeric|min:0',
         ]);
 
-        // Ensure nozzle belongs to this station
         $nozzle = PumpNozzle::where('id', $validated['nozzle_id'])
             ->where('station_id', $shift->station_id)
             ->firstOrFail();
 
-        // Find or create the pre-seeded reading
+        [$openingMech, $openingElec, $openingShs] = $this->deriveOpenings($nozzle, $shift);
+
         $reading = MeterReading::firstOrCreate(
             ['shift_id' => $shift->id, 'nozzle_id' => $nozzle->id],
             [
-                'opening_mechanical' => $nozzle->last_mech ?? 0,
-                'opening_electrical' => $nozzle->last_elec ?? 0,
-                'opening_shs'        => $nozzle->last_shs,
+                'opening_mechanical' => $openingMech,
+                'opening_electrical' => $openingElec,
+                'opening_shs'        => $openingShs,
                 'entered_by'         => auth()->id(),
             ]
         );
 
-        // Correct stale zero openings (shift opened before nozzle readings were set)
-        $openingMech = (float) $reading->opening_mechanical;
-        $openingElec = (float) $reading->opening_electrical;
-        $openingShs  = $reading->opening_shs;
+        $old = $reading->wasRecentlyCreated ? null : $reading->toArray();
 
-        if ($openingElec == 0 && $nozzle->last_elec > 0) {
-            $openingMech = (float) ($nozzle->last_mech ?? 0);
-            $openingElec = (float) ($nozzle->last_elec ?? 0);
-            $openingShs  = $nozzle->last_shs;
+        // Correct stale zero openings (row created before nozzle readings were set)
+        if (!$reading->wasRecentlyCreated && (float)$reading->opening_electrical == 0 && $openingElec > 0) {
+            $reading->opening_mechanical = $openingMech;
+            $reading->opening_electrical = $openingElec;
+            $reading->opening_shs        = $openingShs;
         }
 
-        $old = $reading->toArray();
+        $reading->closing_mechanical = $validated['closing_mechanical'];
+        $reading->closing_electrical = $validated['closing_electrical'];
+        $reading->closing_shs        = $validated['closing_shs'] ?? null;
+        $reading->litres_sold        = round(
+            (float)$validated['closing_electrical'] - (float)$reading->opening_electrical, 3
+        );
+        $reading->shs_sold = $validated['closing_shs'] !== null
+            ? round((float)$validated['closing_shs'] - (float)$reading->opening_shs, 2)
+            : null;
+        $reading->entered_by = auth()->id();
+        $reading->save();
 
-        $reading->update([
-            'opening_mechanical' => $openingMech,
-            'opening_electrical' => $openingElec,
-            'opening_shs'        => $openingShs,
-            'closing_mechanical' => $validated['closing_mechanical'],
-            'closing_electrical' => $validated['closing_electrical'],
-            'closing_shs'        => $validated['closing_shs'] ?? null,
-            'litres_sold'        => round(
-                (float) $validated['closing_electrical'] - $openingElec,
-                3
-            ),
-            'shs_sold' => $validated['closing_shs'] !== null
-                ? round((float) $validated['closing_shs'] - (float) $openingShs, 2)
-                : null,
-            'entered_by' => auth()->id(),
-        ]);
-
-        // Immediately push closing values to nozzle so next shift opens correctly
+        // Keep nozzle cache in sync (used for UI display only)
         $nozzle->update([
             'last_mech' => $validated['closing_mechanical'],
             'last_elec' => $validated['closing_electrical'],
@@ -89,6 +82,7 @@ class MeterReadingController extends Controller
     public function update(Request $request, MeterReading $meterReading)
     {
         $this->denyIfLocked($meterReading->shift);
+        $this->denyIfRecordLocked($meterReading);
 
         $validated = $request->validate([
             'closing_mechanical' => 'required|numeric|min:0',
@@ -103,15 +97,13 @@ class MeterReadingController extends Controller
             'closing_electrical' => $validated['closing_electrical'],
             'closing_shs'        => $validated['closing_shs'] ?? null,
             'litres_sold'        => round(
-                (float) $validated['closing_electrical'] - (float) $meterReading->opening_electrical,
-                3
+                (float)$validated['closing_electrical'] - (float)$meterReading->opening_electrical, 3
             ),
             'shs_sold' => $validated['closing_shs'] !== null
-                ? round((float) $validated['closing_shs'] - (float) $meterReading->opening_shs, 2)
+                ? round((float)$validated['closing_shs'] - (float)$meterReading->opening_shs, 2)
                 : null,
         ]);
 
-        // Keep nozzle last_* in sync
         $meterReading->nozzle->update([
             'last_mech' => $validated['closing_mechanical'],
             'last_elec' => $validated['closing_electrical'],
@@ -124,11 +116,14 @@ class MeterReadingController extends Controller
     }
 
     /**
-     * Clear closing readings — reverts nozzle last_* to this reading's opening values.
+     * Clear closing readings.
+     * Reverts nozzle.last_* to the opening values of this reading so the
+     * shift chain remains consistent.
      */
     public function destroy(MeterReading $meterReading)
     {
         $this->denyIfLocked($meterReading->shift);
+        $this->denyIfRecordLocked($meterReading);
 
         $old = $meterReading->toArray();
 
@@ -140,7 +135,6 @@ class MeterReadingController extends Controller
             'shs_sold'           => null,
         ]);
 
-        // Revert nozzle to the opening readings of this shift
         $meterReading->nozzle->update([
             'last_mech' => $meterReading->opening_mechanical,
             'last_elec' => $meterReading->opening_electrical,
@@ -152,8 +146,57 @@ class MeterReadingController extends Controller
         return back()->with('success', 'Meter reading cleared.');
     }
 
+    // -------------------------------------------------------------------------
+
+    /**
+     * Derive opening readings for a nozzle in a given shift.
+     *
+     * Priority:
+     *  1. Closing values of the most recent prior reading for this nozzle
+     *  2. Nozzle.last_* (set manually in Settings or at station setup)
+     *  3. Zero (absolute fallback for brand-new nozzles)
+     *
+     * @return array{float, float, float|null}
+     */
+    private function deriveOpenings(PumpNozzle $nozzle, Shift $shift): array
+    {
+        $prev = MeterReading::where('nozzle_id', $nozzle->id)
+            ->whereNotNull('closing_electrical')
+            ->whereHas('shift', function ($q) use ($shift) {
+                $q->where('station_id', $shift->station_id)
+                  ->where(function ($sq) use ($shift) {
+                      $sq->where('shift_date', '<', $shift->shift_date)
+                         ->orWhere(function ($sq2) use ($shift) {
+                             $sq2->where('shift_date', $shift->shift_date)
+                                 ->where('id', '<', $shift->id);
+                         });
+                  });
+            })
+            ->orderByDesc('id')
+            ->first();
+
+        if ($prev) {
+            return [
+                (float)$prev->closing_mechanical,
+                (float)$prev->closing_electrical,
+                $prev->closing_shs !== null ? (float)$prev->closing_shs : null,
+            ];
+        }
+
+        return [
+            (float)($nozzle->last_mech ?? 0),
+            (float)($nozzle->last_elec ?? 0),
+            $nozzle->last_shs !== null ? (float)$nozzle->last_shs : null,
+        ];
+    }
+
     private function denyIfLocked(Shift $shift): void
     {
-        if ($shift->isLocked()) abort(403, 'Shift is locked.');
+        if ($shift->isLocked()) abort(403, 'Shift is locked — this DSR has been finalised.');
+    }
+
+    private function denyIfRecordLocked(MeterReading $reading): void
+    {
+        if ($reading->is_locked) abort(403, 'This reading has been locked by DSR approval.');
     }
 }

@@ -2,24 +2,24 @@
 
 namespace App\Services;
 
+use App\Models\CreditSale;
+use App\Models\Delivery;
+use App\Models\DsrLineItem;
 use App\Models\MeterReading;
 use App\Models\Product;
 use App\Models\Shift;
 use App\Models\Tank;
 use App\Models\TankDip;
-use App\Models\Delivery;
-use App\Models\CreditSale;
-use Illuminate\Support\Collection;
 
 class ReconciliationEngine
 {
     /**
-     * Calculate litres sold from meter readings for a shift and product.
+     * Calculate litres sold from the electrical meter (primary source of truth).
      */
     public function calculateMeterSales(MeterReading $reading): float
     {
-        if ($reading->closing_meter === null) return 0.0;
-        return round((float)$reading->closing_meter - (float)$reading->opening_meter, 3);
+        if ($reading->closing_electrical === null) return 0.0;
+        return round((float)$reading->closing_electrical - (float)$reading->opening_electrical, 3);
     }
 
     /**
@@ -39,33 +39,23 @@ class ReconciliationEngine
     }
 
     /**
-     * Calculate revenue: litres_sold × price_per_litre.
-     */
-    public function calculateRevenue(float $litresSold, float $pricePerLitre): float
-    {
-        return round($litresSold * $pricePerLitre, 2);
-    }
-
-    /**
-     * Get opening stock for a tank.
-     * Opening stock = closing dip of previous shift for this tank.
+     * Get opening stock for a tank: closing dip of the previous shift.
+     * Falls back to the opening dip of the current shift if no prior shift exists.
      */
     public function getOpeningStock(Tank $tank, Shift $shift): float
     {
-        // Find the previous shift's closing dip for this tank
-        $previousDip = TankDip::whereHas('shift', function ($q) use ($tank, $shift) {
+        $previousDip = TankDip::where('tank_id', $tank->id)
+            ->where('dip_type', 'closing')
+            ->whereHas('shift', function ($q) use ($tank, $shift) {
                 $q->where('station_id', $tank->station_id)
                   ->where(function ($sq) use ($shift) {
                       $sq->where('shift_date', '<', $shift->shift_date)
                          ->orWhere(function ($sq2) use ($shift) {
                              $sq2->where('shift_date', $shift->shift_date)
-                                 ->where('shift_type', 'night')
-                                 ->where('shift_type', '!=', $shift->shift_type);
+                                 ->where('id', '<', $shift->id);
                          });
                   });
             })
-            ->where('tank_id', $tank->id)
-            ->where('dip_type', 'closing')
             ->orderByDesc('id')
             ->first();
 
@@ -73,7 +63,6 @@ class ReconciliationEngine
             return (float)$previousDip->dip_volume;
         }
 
-        // Also check opening dip of this shift
         $openingDip = TankDip::where('tank_id', $tank->id)
             ->where('shift_id', $shift->id)
             ->where('dip_type', 'opening')
@@ -90,24 +79,6 @@ class ReconciliationEngine
         return (float)Delivery::where('tank_id', $tank->id)
             ->where('shift_id', $shift->id)
             ->sum('delivery_quantity');
-    }
-
-    /**
-     * Calculate expected stock.
-     * expected_stock = opening_stock + deliveries - litres_sold
-     */
-    public function calculateExpectedStock(float $openingStock, float $deliveries, float $litresSold): float
-    {
-        return round($openingStock + $deliveries - $litresSold, 3);
-    }
-
-    /**
-     * Calculate variance.
-     * variance = actual_dip - expected_stock
-     */
-    public function calculateVariance(float $actualDip, float $expectedStock): float
-    {
-        return round($actualDip - $expectedStock, 3);
     }
 
     /**
@@ -139,66 +110,92 @@ class ReconciliationEngine
     }
 
     /**
-     * Run full reconciliation for a shift and product, returning a data array.
+     * Run full reconciliation for a shift and product.
+     *
+     * IMPORTANT: meter_readings has no product_id column. Product is on the nozzle.
+     * We aggregate across all nozzles whose product_id matches, then aggregate
+     * tank stock across all tanks carrying that product.
      */
     public function reconcileShiftProduct(Shift $shift, Product $product): array
     {
-        $shiftDate = $shift->shift_date->toDateString();
+        $shiftDate     = $shift->shift_date->toDateString();
         $pricePerLitre = $this->getPriceForDate($product, $shiftDate);
 
-        // Meter readings
-        $meterReading = MeterReading::where('shift_id', $shift->id)
-            ->where('product_id', $product->id)
-            ->first();
+        // --- Meter readings: aggregate all nozzles for this product ---
+        $readings = MeterReading::where('shift_id', $shift->id)
+            ->whereHas('nozzle', fn($q) => $q->where('product_id', $product->id))
+            ->get();
 
-        $litresSold   = $meterReading ? $this->calculateMeterSales($meterReading) : 0.0;
-        $openingMeter = $meterReading ? (float)$meterReading->opening_meter : 0.0;
-        $closingMeter = $meterReading ? (float)$meterReading->closing_meter : 0.0;
-        $revenue      = $this->calculateRevenue($litresSold, $pricePerLitre);
+        $litresSold   = round($readings->sum(fn($r) => $this->calculateMeterSales($r)), 3);
+        $openingMeter = round((float)$readings->sum('opening_electrical'), 3);
+        $closingMeter = round((float)$readings->sum('closing_electrical'), 3);
+        $revenue      = round($litresSold * $pricePerLitre, 2);
 
-        // Tank-level reconciliation (aggregate across all tanks for this product)
+        // SHS cross-check: pump's own KES odometer vs (litres × price)
+        $shsSold        = round((float)$readings->sum('shs_sold'), 2);
+        $shsExpected    = $revenue;
+        $shsDiscrepancy = round(abs($shsSold - $shsExpected), 2);
+        $tolerancePct   = (float)config('dsr.shs_tolerance_pct', 1.0);
+        $shsWarning     = $shsExpected > 0
+            && (($shsDiscrepancy / $shsExpected) * 100) > $tolerancePct;
+
+        // --- Tank stock: aggregate all tanks for this product ---
         $tanks = Tank::where('station_id', $shift->station_id)
             ->where('product_id', $product->id)
             ->where('is_active', true)
             ->get();
 
-        $openingStock   = 0.0;
+        $openingStock    = 0.0;
         $totalDeliveries = 0.0;
-        $expectedStock  = 0.0;
-        $actualStock    = 0.0;
-        $tankId         = null;
+        $actualStock     = 0.0;
+        $tankId          = null;
 
         foreach ($tanks as $tank) {
-            $tankOpeningStock   = $this->getOpeningStock($tank, $shift);
-            $tankDeliveries     = $this->getDeliveriesForShift($tank, $shift);
-            $tankActualStock    = $this->getActualStock($tank, $shift);
-            $openingStock      += $tankOpeningStock;
-            $totalDeliveries   += $tankDeliveries;
-            $actualStock       += $tankActualStock;
-            $tankId             = $tank->id; // last tank id (for single-tank products)
+            $openingStock    += $this->getOpeningStock($tank, $shift);
+            $totalDeliveries += $this->getDeliveriesForShift($tank, $shift);
+            $actualStock     += $this->getActualStock($tank, $shift);
+            $tankId           = $tank->id;
         }
 
-        $expectedStock = $this->calculateExpectedStock($openingStock, $totalDeliveries, $litresSold);
-        $variance      = $this->calculateVariance($actualStock, $expectedStock);
+        $expectedStock = round($openingStock + $totalDeliveries - $litresSold, 3);
+        $variance      = round($actualStock - $expectedStock, 3);
+
+        // Variance percentage for this period
+        $variancePct = $litresSold > 0
+            ? round((abs($variance) / $litresSold) * 100, 3)
+            : 0.0;
+
+        // Rolling cumulative variance: add to last finalised line item's cumulative
+        $prevCumPct = DsrLineItem::where('product_id', $product->id)
+            ->whereHas('dailySalesRecord', function ($q) use ($shift) {
+                $q->where('station_id', $shift->station_id)->where('locked', true);
+            })
+            ->latest('id')
+            ->value('cumulative_variance_pct') ?? 0.0;
+
+        $cumulativeVariancePct = round((float)$prevCumPct + $variancePct, 3);
 
         // Credit sales
         $creditSales = $this->getCreditSalesForShift($product, $shift);
 
         return [
-            'product_id'          => $product->id,
-            'tank_id'             => $tankId,
-            'opening_meter'       => $openingMeter,
-            'closing_meter'       => $closingMeter,
-            'litres_sold'         => $litresSold,
-            'price_per_litre'     => $pricePerLitre,
-            'revenue'             => $revenue,
-            'opening_stock'       => round($openingStock, 3),
-            'deliveries'          => round($totalDeliveries, 3),
-            'expected_stock'      => $expectedStock,
-            'actual_stock'        => round($actualStock, 3),
-            'variance'            => $variance,
-            'credit_sales_litres' => $creditSales['litres'],
-            'credit_sales_value'  => $creditSales['value'],
+            'product_id'              => $product->id,
+            'tank_id'                 => $tankId,
+            'opening_meter'           => $openingMeter,
+            'closing_meter'           => $closingMeter,
+            'litres_sold'             => $litresSold,
+            'price_per_litre'         => $pricePerLitre,
+            'revenue'                 => $revenue,
+            'opening_stock'           => round($openingStock, 3),
+            'deliveries'              => round($totalDeliveries, 3),
+            'expected_stock'          => $expectedStock,
+            'actual_stock'            => round($actualStock, 3),
+            'variance'                => $variance,
+            'shortage'                => $variance < 0 ? abs($variance) : 0.0,
+            'excess'                  => $variance > 0 ? $variance : 0.0,
+            'cumulative_variance_pct' => $cumulativeVariancePct,
+            'credit_sales_litres'     => $creditSales['litres'],
+            'credit_sales_value'      => $creditSales['value'],
         ];
     }
 }

@@ -9,7 +9,7 @@ class Payment extends Model
 {
     protected $fillable = [
         'credit_customer_id', 'station_id', 'payment_date', 'receipt_no',
-        'trans_type', 'amount', 'payment_method', 'reference', 'notes', 'received_by',
+        'trans_type', 'amount', 'payment_method', 'reference', 'notes', 'received_by', 'is_locked',
     ];
 
     protected $casts = [

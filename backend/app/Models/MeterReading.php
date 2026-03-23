@@ -12,7 +12,7 @@ class MeterReading extends Model
         'opening_mechanical', 'closing_mechanical',
         'opening_electrical', 'closing_electrical',
         'opening_shs',        'closing_shs',
-        'entered_by',
+        'litres_sold', 'shs_sold', 'entered_by', 'is_locked',
     ];
 
     protected $casts = [

@@ -23,6 +23,8 @@ class DailySalesRecord extends Model
         'z_amount_a', 'z_amount_b', 'z_amount_d',
         // Summary
         'total_fuel_sales', 'gross_sales', 'net_sales_balance',
+        // Variance + override
+        'variance_status', 'override_reason', 'override_by', 'override_at',
         // Meta
         'product_breakdown', 'generated_at', 'approved_at', 'approved_by', 'locked',
     ];
@@ -51,6 +53,7 @@ class DailySalesRecord extends Model
         'product_breakdown'  => 'array',
         'generated_at'       => 'datetime',
         'approved_at'        => 'datetime',
+        'override_at'        => 'datetime',
         'locked'             => 'boolean',
     ];
 

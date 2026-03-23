@@ -12,7 +12,7 @@ class CreditSale extends Model
         'debit_note', 'type',
         'quantity', 'price_applied', 'total_value',
         'vat_amount', 'wht_amount',
-        'vehicle_plate', 'notes', 'entered_by',
+        'vehicle_plate', 'notes', 'entered_by', 'is_locked',
     ];
 
     protected $casts = [

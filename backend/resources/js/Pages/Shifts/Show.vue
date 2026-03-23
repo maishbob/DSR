@@ -426,6 +426,19 @@ function generateDsr() {
         <div class="py-6">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
 
+                <!-- Locked banner -->
+                <div v-if="isLocked"
+                    class="mb-4 flex items-center gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-800">
+                    <svg class="h-5 w-5 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                    <div>
+                        <p class="font-semibold text-sm">This shift is locked — DSR has been finalised and approved.</p>
+                        <p class="text-xs mt-0.5 text-red-600">All records are read-only. Use the Adjustments section on the DSR to record corrections.</p>
+                    </div>
+                </div>
+
                 <!-- Tabs -->
                 <div class="border-b border-gray-200 mb-0">
                     <nav class="flex flex-wrap -mb-px">

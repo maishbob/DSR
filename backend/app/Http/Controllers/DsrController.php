@@ -3,14 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailySalesRecord;
-use App\Models\Shift;
 use App\Services\DsrService;
+use App\Services\VarianceEngine;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class DsrController extends Controller
 {
-    public function __construct(private readonly DsrService $dsrService) {}
+    public function __construct(
+        private readonly DsrService $dsrService,
+        private readonly VarianceEngine $varianceEngine,
+    ) {}
 
     public function index(Request $request)
     {
@@ -32,37 +35,67 @@ class DsrController extends Controller
         $dsr->load([
             'lineItems.product',
             'lineItems.tank',
-            'shift.meterReadings.product',
+            'shift.meterReadings.nozzle.product',
             'shift.tankDips.tank',
             'shift.deliveries.product',
             'shift.creditSales.creditCustomer',
             'shift.creditSales.product',
+            'shift.expenses',
+            'shift.cardPayments',
+            'shift.posTransactions',
             'approvedBy',
             'adjustments.createdBy',
             'station',
         ]);
 
         return Inertia::render('Dsr/Show', [
-            'dsr' => $dsr,
+            'dsr'            => $dsr,
+            'varianceLabels' => [
+                'ok'       => $this->varianceEngine->statusLabel('ok'),
+                'warning'  => $this->varianceEngine->statusLabel('warning'),
+                'critical' => $this->varianceEngine->statusLabel('critical'),
+            ],
         ]);
     }
 
+    /**
+     * Approve and lock a DSR.
+     *
+     * CRITICAL variance: requires override_reason in the request body.
+     * Returns validation errors (with variance_status) when blocked.
+     */
     public function approve(Request $request, DailySalesRecord $dsr)
     {
-        if (!$request->user()->isManager()) {
-            abort(403, 'Only managers can approve DSRs.');
-        }
-
         if ($dsr->locked) {
             return back()->withErrors(['dsr' => 'DSR is already locked.']);
         }
 
-        $this->dsrService->approveDsr($dsr, $request->user()->id);
+        $validated = $request->validate([
+            'override_reason' => 'nullable|string|max:1000',
+        ]);
+
+        try {
+            $this->dsrService->approveDsr(
+                $dsr,
+                $request->user()->id,
+                $validated['override_reason'] ?? null,
+            );
+        } catch (\RuntimeException $e) {
+            return back()->withErrors([
+                'dsr'             => $e->getMessage(),
+                'variance_status' => $dsr->variance_status,
+            ]);
+        }
 
         return redirect()->route('dsr.show', $dsr)
             ->with('success', 'DSR approved and locked.');
     }
 
+    /**
+     * Store an adjustment on a locked DSR.
+     * Corrections to live data must be made before generating the DSR.
+     * Post-lock corrections go through this endpoint as compensating entries.
+     */
     public function storeAdjustment(Request $request, DailySalesRecord $dsr)
     {
         if (!$dsr->locked) {

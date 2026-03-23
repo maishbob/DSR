@@ -6,6 +6,7 @@ import { usePage } from '@inertiajs/vue3';
 
 const props = defineProps({
     dsr: Object,
+    varianceLabels: Object,
 });
 
 const page = usePage();
@@ -19,7 +20,18 @@ const adjForm = useForm({
     corrected_value: '',
 });
 
+const approveForm = useForm({ override_reason: '' });
 const showAdjForm = ref(false);
+const showOverrideInput = ref(false);
+
+const varianceStatus = computed(() => props.dsr.variance_status ?? 'ok');
+const isCritical     = computed(() => varianceStatus.value === 'critical');
+
+const varianceStatusClass = computed(() => ({
+    ok:       'bg-green-100 text-green-700',
+    warning:  'bg-yellow-100 text-yellow-800',
+    critical: 'bg-red-100 text-red-700',
+}[varianceStatus.value] ?? 'bg-gray-100 text-gray-700'));
 
 function submitAdj() {
     adjForm.post(route('dsr.adjustments.store', props.dsr.id), {
@@ -28,9 +40,12 @@ function submitAdj() {
 }
 
 function approve() {
-    if (confirm('Approve and lock this DSR? This cannot be undone.')) {
-        router.post(route('dsr.approve', props.dsr.id));
+    if (isCritical.value && !approveForm.override_reason.trim()) {
+        showOverrideInput.value = true;
+        return;
     }
+    if (!confirm('Approve and lock this DSR? This cannot be undone.')) return;
+    approveForm.post(route('dsr.approve', props.dsr.id));
 }
 
 function print() {
@@ -64,14 +79,19 @@ function fmtDate(d) {
                         {{ dsr.locked ? 'Locked' : 'Draft' }}
                     </span>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex items-center gap-2">
+                    <!-- Variance status badge -->
+                    <span v-if="dsr.variance_status" class="px-2 py-0.5 rounded text-xs font-semibold" :class="varianceStatusClass">
+                        {{ dsr.variance_status?.toUpperCase() }}
+                    </span>
                     <button @click="print"
                         class="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50">
                         Print
                     </button>
                     <button v-if="!dsr.locked && isManager" @click="approve"
-                        class="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-purple-700 font-medium">
-                        Approve & Lock
+                        :class="isCritical ? 'bg-red-600 hover:bg-red-700' : 'bg-purple-600 hover:bg-purple-700'"
+                        class="text-white px-4 py-1.5 rounded-lg text-sm font-medium">
+                        {{ isCritical ? 'Override & Approve' : 'Approve & Lock' }}
                     </button>
                     <button v-if="dsr.locked" @click="showAdjForm = !showAdjForm"
                         class="border border-orange-500 text-orange-600 px-4 py-1.5 rounded-lg text-sm hover:bg-orange-50">
@@ -80,6 +100,34 @@ function fmtDate(d) {
                 </div>
             </div>
         </template>
+
+        <!-- Critical variance override input -->
+        <div v-if="showOverrideInput && !dsr.locked"
+            class="mb-4 rounded-lg border border-red-300 bg-red-50 p-4">
+            <p class="text-sm font-semibold text-red-800 mb-2">
+                This DSR has a CRITICAL variance. An override reason is required to approve it.
+            </p>
+            <p class="text-xs text-red-600 mb-3">{{ varianceLabels?.critical }}</p>
+            <textarea v-model="approveForm.override_reason" rows="3" placeholder="State the reason for approving despite the critical variance…"
+                class="w-full border border-red-300 rounded px-3 py-2 text-sm focus:ring-red-400 focus:border-red-400 mb-2"></textarea>
+            <p v-if="approveForm.errors.dsr" class="text-xs text-red-700 mb-2">{{ approveForm.errors.dsr }}</p>
+            <div class="flex gap-2">
+                <button @click="approve"
+                    class="bg-red-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-red-700">
+                    Confirm Override & Approve
+                </button>
+                <button @click="showOverrideInput = false"
+                    class="border border-gray-300 text-gray-700 px-4 py-1.5 rounded text-sm hover:bg-gray-50">
+                    Cancel
+                </button>
+            </div>
+        </div>
+
+        <!-- Override record (when already approved with override) -->
+        <div v-if="dsr.locked && dsr.override_reason"
+            class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            <span class="font-semibold">Approved with override:</span> {{ dsr.override_reason }}
+        </div>
 
         <!-- DSR Header Summary -->
         <div class="bg-white rounded-xl shadow-sm p-6 mb-6 print:shadow-none">
