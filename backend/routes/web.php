@@ -44,6 +44,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/shifts', [ShiftController::class, 'store'])->name('shifts.store');
     Route::get('/shifts/{shift}', [ShiftController::class, 'show'])->name('shifts.show');
     Route::post('/shifts/{shift}/generate-dsr', [ShiftController::class, 'generateDsr'])->name('shifts.generate-dsr');
+    Route::patch('/shifts/{shift}/cash', [ShiftController::class, 'updateCash'])->name('shifts.update-cash');
 
     // Meter readings
     Route::post('/shifts/{shift}/meter-readings', [MeterReadingController::class, 'store'])->name('meter-readings.store');

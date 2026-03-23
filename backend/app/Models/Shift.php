@@ -13,12 +13,15 @@ class Shift extends Model
         'station_id', 'shift_date', 'shift_type',
         'opened_at', 'closed_at', 'status',
         'opened_by', 'closed_by',
+        'actual_cash', 'mpesa_amount', 'cash_variance_status',
     ];
 
     protected $casts = [
-        'shift_date' => 'date',
-        'opened_at'  => 'datetime',
-        'closed_at'  => 'datetime',
+        'shift_date'  => 'date',
+        'opened_at'   => 'datetime',
+        'closed_at'   => 'datetime',
+        'actual_cash' => 'decimal:2',
+        'mpesa_amount'=> 'decimal:2',
     ];
 
     public function station(): BelongsTo

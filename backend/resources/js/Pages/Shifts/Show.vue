@@ -6,6 +6,7 @@ import { ref, computed } from 'vue';
 const props = defineProps({
     shift: Object,
     station: Object,
+    cashReconciliation: Object,
 });
 
 // ── Tab management ────────────────────────────────────────────────────────────
@@ -353,8 +354,6 @@ const totalExpenses = computed(() =>
 );
 
 // ── Sales Summary ─────────────────────────────────────────────────────────────
-const cashCollected  = ref(Number(props.shift.daily_sales_record?.cash_collected ?? 0));
-const mpesaCollected = ref(Number(props.shift.daily_sales_record?.mpesa_collected ?? 0));
 
 // Per-product fuel summary
 const fuelSummary = computed(() => {
@@ -375,14 +374,48 @@ const fuelSummary = computed(() => {
 const totalFuelLitres  = computed(() => fuelSummary.value.reduce((s, p) => s + p.litres, 0));
 const totalFuelRevenue = computed(() => fuelSummary.value.reduce((s, p) => s + p.revenue, 0));
 
+// Gross sales = all revenue channels
 const grossSales = computed(() =>
-    totalClientSales.value + totalCardSales.value + totalPosSales.value +
-    Number(cashCollected.value) + Number(mpesaCollected.value)
+    totalFuelRevenue.value + totalOilSales.value
 );
 
+// Net balance = gross - non-cash channels
 const netSalesBalance = computed(() =>
-    grossSales.value - totalFuelRevenue.value - totalOilSales.value
+    grossSales.value
+    - totalClientSales.value
+    - totalCardSales.value
+    - totalPosSales.value
+    - Number(cashForm.mpesa_amount || 0)
 );
+
+// ── Cash Reconciliation ───────────────────────────────────────────────────────
+const cashForm = useForm({
+    actual_cash:  props.shift.actual_cash  !== null ? String(props.shift.actual_cash)  : '',
+    mpesa_amount: props.shift.mpesa_amount !== null ? String(props.shift.mpesa_amount) : '',
+});
+
+// Server-computed breakdown (recalculated on each page load / after save)
+const recon = computed(() => props.cashReconciliation ?? {});
+
+const cashVarianceStatus = computed(() => recon.value.variance_status ?? 'pending');
+
+const varianceClass = computed(() => ({
+    ok:       'text-green-700 bg-green-50',
+    warning:  'text-yellow-800 bg-yellow-50',
+    critical: 'text-red-700 bg-red-50',
+    pending:  'text-gray-500 bg-gray-50',
+}[cashVarianceStatus.value] ?? 'text-gray-500 bg-gray-50'));
+
+const varianceBadgeClass = computed(() => ({
+    ok:       'bg-green-100 text-green-700',
+    warning:  'bg-yellow-100 text-yellow-800',
+    critical: 'bg-red-100 text-red-700',
+    pending:  'bg-gray-100 text-gray-500',
+}[cashVarianceStatus.value] ?? 'bg-gray-100 text-gray-500'));
+
+function saveCash() {
+    cashForm.patch(route('shifts.update-cash', props.shift.id));
+}
 
 function generateDsr() {
     if (confirm('Generate DSR from current data?')) {
@@ -1179,56 +1212,131 @@ function generateDsr() {
                                 </tfoot>
                             </table>
 
-                            <!-- Other lines -->
-                            <div class="space-y-1 pt-2 border-t">
+                            <!-- Revenue channels -->
+                            <div class="space-y-1 pt-2 border-t text-sm">
                                 <div class="flex justify-between">
-                                    <span class="text-gray-600">Total Oil Sales:</span>
+                                    <span class="text-gray-600">Total Oil/Shop Sales:</span>
                                     <span class="font-mono">{{ fmt2(totalOilSales) }}</span>
                                 </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Total Sales On Account:</span>
-                                    <span class="font-mono">{{ fmt2(totalClientSales) }}</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Total Card Sales:</span>
-                                    <span class="font-mono">{{ fmt2(totalCardSales) }}</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Total POS Sales:</span>
-                                    <span class="font-mono">{{ fmt2(totalPosSales) }}</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Total Expenses:</span>
-                                    <span class="font-mono">{{ fmt2(totalExpenses) }}</span>
-                                </div>
-                            </div>
-
-                            <!-- Cash / MPESA inputs -->
-                            <div class="space-y-2 pt-3 border-t">
-                                <div class="flex justify-between items-center">
-                                    <span class="text-gray-600">Cash:</span>
-                                    <input v-model="cashCollected" type="number" step="0.01"
-                                        class="w-40 border rounded px-2 py-1 text-sm font-mono text-right" />
-                                </div>
-                                <div class="flex justify-between items-center">
-                                    <span class="text-gray-600">MPESA:</span>
-                                    <input v-model="mpesaCollected" type="number" step="0.01"
-                                        class="w-40 border rounded px-2 py-1 text-sm font-mono text-right" />
-                                </div>
-                            </div>
-
-                            <!-- Totals -->
-                            <div class="pt-3 border-t space-y-2">
-                                <div class="flex justify-between font-semibold">
+                                <div class="flex justify-between font-semibold border-t pt-1">
                                     <span>Gross Sales:</span>
                                     <span class="font-mono">{{ fmt2(grossSales) }}</span>
                                 </div>
-                                <div class="flex justify-between font-bold text-base"
+                            </div>
+
+                            <!-- Non-cash deductions -->
+                            <div class="space-y-1 pt-2 border-t text-sm">
+                                <p class="text-xs text-gray-400 uppercase tracking-wide font-medium mb-1">Non-Cash Channels</p>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Sales On Account (Credit):</span>
+                                    <span class="font-mono text-gray-700">{{ fmt2(totalClientSales) }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">Card Payments:</span>
+                                    <span class="font-mono text-gray-700">{{ fmt2(totalCardSales) }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-600">POS:</span>
+                                    <span class="font-mono text-gray-700">{{ fmt2(totalPosSales) }}</span>
+                                </div>
+                                <!-- MPESA — non-cash, must be entered to compute expected cash -->
+                                <div class="flex justify-between items-center">
+                                    <span class="text-gray-600">MPESA:</span>
+                                    <input v-if="!isLocked" v-model="cashForm.mpesa_amount" type="number" step="0.01" min="0"
+                                        class="w-36 border rounded px-2 py-1 text-sm font-mono text-right"
+                                        placeholder="0.00" />
+                                    <span v-else class="font-mono">{{ fmt2(recon.mpesa_amount) }}</span>
+                                </div>
+                                <div class="flex justify-between font-semibold border-t pt-1"
                                     :class="netSalesBalance < 0 ? 'text-red-600' : 'text-green-700'">
-                                    <span>Net Sales Balance:</span>
+                                    <span>Net Cash Balance:</span>
                                     <span class="font-mono">
                                         {{ netSalesBalance < 0 ? `(${fmt2(Math.abs(netSalesBalance))})` : fmt2(netSalesBalance) }}
                                     </span>
+                                </div>
+                            </div>
+
+                            <!-- Expenses -->
+                            <div class="flex justify-between pt-2 border-t text-sm">
+                                <span class="text-gray-600">Cash Expenses:</span>
+                                <span class="font-mono text-red-600">{{ fmt2(totalExpenses) }}</span>
+                            </div>
+
+                            <!-- ── Cash Reconciliation ── -->
+                            <div class="mt-4 rounded-lg border-2 p-4 text-sm"
+                                :class="{
+                                    'border-gray-200 bg-gray-50': cashVarianceStatus === 'pending',
+                                    'border-green-300 bg-green-50': cashVarianceStatus === 'ok',
+                                    'border-yellow-300 bg-yellow-50': cashVarianceStatus === 'warning',
+                                    'border-red-300 bg-red-50': cashVarianceStatus === 'critical',
+                                }">
+                                <div class="flex items-center justify-between mb-3">
+                                    <p class="font-semibold text-gray-700">Cash Drawer Reconciliation</p>
+                                    <span class="px-2 py-0.5 rounded text-xs font-semibold" :class="varianceBadgeClass">
+                                        {{ cashVarianceStatus === 'pending' ? 'NOT COUNTED' : cashVarianceStatus.toUpperCase() }}
+                                    </span>
+                                </div>
+
+                                <!-- Expected cash breakdown -->
+                                <div class="space-y-1 text-xs text-gray-600 mb-3 pb-3 border-b border-gray-200">
+                                    <div class="flex justify-between">
+                                        <span>Fuel Cash Sales:</span>
+                                        <span class="font-mono">{{ fmt2(recon.fuel_cash_sales ?? 0) }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span>Oil/Shop Cash Sales:</span>
+                                        <span class="font-mono">{{ fmt2(recon.oil_cash_sales ?? 0) }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span>Cash Receipts from Customers:</span>
+                                        <span class="font-mono">{{ fmt2(recon.cash_payments_received ?? 0) }}</span>
+                                    </div>
+                                    <div class="flex justify-between text-red-600">
+                                        <span>Less: Cash Expenses:</span>
+                                        <span class="font-mono">({{ fmt2(recon.cash_expenses ?? 0) }})</span>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-2">
+                                    <!-- Expected cash (calculated) -->
+                                    <div class="flex justify-between font-semibold text-gray-800">
+                                        <span>Expected Cash in Drawer:</span>
+                                        <span class="font-mono text-base">KES {{ fmt2(recon.expected_cash ?? 0) }}</span>
+                                    </div>
+
+                                    <!-- Actual cash input -->
+                                    <div class="flex justify-between items-center">
+                                        <span class="font-semibold text-gray-800">Actual Cash Counted:</span>
+                                        <input v-if="!isLocked" v-model="cashForm.actual_cash" type="number" step="0.01" min="0"
+                                            class="w-36 border-2 border-gray-300 rounded px-2 py-1 text-sm font-mono text-right font-semibold focus:border-blue-400"
+                                            placeholder="Enter count" />
+                                        <span v-else class="font-mono font-semibold text-base">KES {{ fmt2(recon.actual_cash) }}</span>
+                                    </div>
+
+                                    <!-- Variance (shown only when actual entered) -->
+                                    <div v-if="recon.variance !== null && recon.variance !== undefined"
+                                        class="flex justify-between font-bold text-base pt-2 border-t"
+                                        :class="varianceClass">
+                                        <span>Variance:</span>
+                                        <span class="font-mono">
+                                            {{ recon.variance < 0 ? `(${fmt2(Math.abs(recon.variance))})` : fmt2(recon.variance) }}
+                                            <span class="text-xs font-normal ml-1">({{ recon.variance_pct?.toFixed(1) }}%)</span>
+                                        </span>
+                                    </div>
+
+                                    <!-- Missing price warning -->
+                                    <p v-if="recon.missing_prices?.length" class="text-xs text-amber-700 mt-1">
+                                        ⚠ No price set for: {{ recon.missing_prices.join(', ') }} — fuel cash sales may be understated.
+                                    </p>
+
+                                    <!-- Save button -->
+                                    <button v-if="!isLocked" @click="saveCash"
+                                        :disabled="cashForm.processing || !cashForm.actual_cash"
+                                        class="mt-2 w-full py-1.5 rounded text-sm font-medium text-white transition-colors"
+                                        :class="cashForm.actual_cash ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'">
+                                        {{ cashForm.processing ? 'Saving…' : 'Save Cash Count' }}
+                                    </button>
+                                    <p v-if="cashForm.errors.actual_cash" class="text-xs text-red-600">{{ cashForm.errors.actual_cash }}</p>
                                 </div>
                             </div>
                         </div>

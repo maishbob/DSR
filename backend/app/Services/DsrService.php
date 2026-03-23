@@ -20,6 +20,7 @@ class DsrService
         private readonly ReconciliationEngine $engine,
         private readonly VarianceEngine $variance,
         private readonly LedgerService $ledger,
+        private readonly CashReconciliationService $cash,
     ) {}
 
     /**
@@ -99,10 +100,20 @@ class DsrService
                 $dsr->lineItems()->create($item);
             }
 
-            // Classify and store variance status
+            // Classify stock variance status
             $dsr->refresh()->load('lineItems');
             $varianceStatus = $this->variance->classifyDsr($dsr);
-            $dsr->update(['variance_status' => $varianceStatus]);
+
+            // Compute cash reconciliation and snapshot into DSR
+            $cashRecon = $this->cash->calculate($shift->fresh());
+            $dsr->update([
+                'variance_status'  => $varianceStatus,
+                'cash_collected'   => $cashRecon['actual_cash'],
+                'mpesa_collected'  => $cashRecon['mpesa_amount'],
+                'total_expenses'   => $cashRecon['cash_expenses'],
+                'total_cash_sales' => $cashRecon['fuel_cash_sales'],
+                'total_oil_sales'  => $cashRecon['oil_cash_sales'],
+            ]);
 
             return $dsr->fresh(['lineItems.product', 'shift', 'station']);
         });
@@ -124,7 +135,15 @@ class DsrService
             throw new \RuntimeException('DSR is already locked.');
         }
 
-        $status = $dsr->variance_status ?? $this->variance->classifyDsr($dsr);
+        $stockStatus = $dsr->variance_status ?? $this->variance->classifyDsr($dsr);
+
+        // Cash reconciliation check — also blocks on critical cash variance
+        $shift = $dsr->shift;
+        $cashStatus = $shift->cash_variance_status ?? 'pending';
+
+        // Treat 'pending' (no actual_cash entered) as a warning, not a block
+        $effectiveStatus = $this->worstStatus($stockStatus, $cashStatus === 'pending' ? 'ok' : $cashStatus);
+        $status = $effectiveStatus;
 
         if ($status === 'critical' && empty($overrideReason)) {
             throw new \RuntimeException(
@@ -174,5 +193,11 @@ class DsrService
 
             return $dsr->fresh();
         });
+    }
+
+    private function worstStatus(string $a, string $b): string
+    {
+        $rank = ['ok' => 0, 'warning' => 1, 'critical' => 2];
+        return ($rank[$a] ?? 0) >= ($rank[$b] ?? 0) ? $a : $b;
     }
 }

@@ -3,8 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Shift;
+use App\Services\CashReconciliationService;
 use App\Services\DsrService;
-use App\Services\ShiftService; // still used for openShift
+use App\Services\ShiftService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -14,6 +15,7 @@ class ShiftController extends Controller
     public function __construct(
         private readonly ShiftService $shiftService,
         private readonly DsrService $dsrService,
+        private readonly CashReconciliationService $cashService,
     ) {}
 
     public function index(Request $request): Response
@@ -38,8 +40,8 @@ class ShiftController extends Controller
             ->get();
 
         return Inertia::render('Shifts/Index', [
-            'shifts' => $shifts,
-            'date'   => $date,
+            'shifts'  => $shifts,
+            'date'    => $date,
             'station' => $station,
         ]);
     }
@@ -91,9 +93,48 @@ class ShiftController extends Controller
         ])->first();
 
         return Inertia::render('Shifts/Show', [
-            'shift'   => $shift,
-            'station' => $station,
+            'shift'              => $shift,
+            'station'            => $station,
+            'cashReconciliation' => $this->cashService->calculate($shift),
         ]);
+    }
+
+    /**
+     * Save the operator's actual cash count and MPESA total for the shift.
+     *
+     * This is the only write path for actual_cash and mpesa_amount.
+     * It recalculates and persists the cash_variance_status immediately
+     * so it survives page reloads and is available during DSR generation.
+     */
+    public function updateCash(Request $request, Shift $shift)
+    {
+        $this->authorizeStation($shift);
+
+        if ($shift->isLocked()) {
+            return back()->withErrors(['cash' => 'Shift is locked.']);
+        }
+
+        $validated = $request->validate([
+            'actual_cash'  => 'required|numeric|min:0',
+            'mpesa_amount' => 'nullable|numeric|min:0',
+        ]);
+
+        // Persist MPESA first so calculate() uses the new value
+        $shift->update([
+            'mpesa_amount' => $validated['mpesa_amount'] ?? 0,
+        ]);
+
+        // Recalculate with fresh MPESA value
+        $recon = $this->cashService->calculate($shift->fresh());
+
+        $shift->update([
+            'actual_cash'          => $validated['actual_cash'],
+            'cash_variance_status' => $recon['variance_status'],
+        ]);
+
+        $this->logCashSubmission($shift, $recon);
+
+        return back()->with('success', 'Cash count saved.');
     }
 
     public function generateDsr(Request $request, Shift $shift)
@@ -106,11 +147,32 @@ class ShiftController extends Controller
             ->with('success', 'DSR generated successfully.');
     }
 
+    // -------------------------------------------------------------------------
+
     private function authorizeStation(Shift $shift): void
     {
         $user = auth()->user();
         if ($shift->station_id !== $user->station_id && !$user->isOwner()) {
             abort(403);
         }
+    }
+
+    private function logCashSubmission(Shift $shift, array $recon): void
+    {
+        \App\Models\AuditLog::create([
+            'user_id'    => auth()->id(),
+            'station_id' => $shift->station_id,
+            'action'     => 'cash_count_submitted',
+            'model_type' => 'Shift',
+            'model_id'   => $shift->id,
+            'old_values' => null,
+            'new_values' => [
+                'actual_cash'    => $recon['actual_cash'],
+                'expected_cash'  => $recon['expected_cash'],
+                'variance'       => $recon['variance'],
+                'variance_status'=> $recon['variance_status'],
+            ],
+            'ip_address' => request()->ip(),
+        ]);
     }
 }

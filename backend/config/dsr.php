@@ -28,6 +28,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Cash Variance Thresholds
+    |--------------------------------------------------------------------------
+    |
+    | Controls when a cash drawer variance triggers a WARNING or CRITICAL status.
+    | Both absolute (KES) and percentage (of expected cash) conditions are checked
+    | — whichever is worse wins.
+    |
+    | status   | meaning
+    | ---------|----------------------------------------------------------
+    | ok       | Variance within tolerance — DSR can be finalised normally
+    | warning  | Variance notable — DSR can be finalised, manager is informed
+    | critical | Variance significant — finalisation blocked without override
+    |
+    */
+    'cash_variance_thresholds' => [
+        'warning_abs'  => 500,    // KES absolute
+        'critical_abs' => 2000,   // KES absolute
+        'warning_pct'  => 1.0,    // % of expected cash
+        'critical_pct' => 3.0,    // % of expected cash
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | SHS / Electrical Discrepancy Tolerance
     |--------------------------------------------------------------------------
     |
