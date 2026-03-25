@@ -10,6 +10,16 @@ set -e  # Exit immediately on any error
 APP_DIR="/home/tosnaxan/dsr/backend"
 WEB_ROOT="/home/tosnaxan/public_html/dsr.pinnaclekenyaprojects.com"
 
+# Use PHP 8.2 if available (cPanel EA4 path), otherwise default php
+if [ -f "/usr/local/bin/ea-php82" ]; then
+    PHP="/usr/local/bin/ea-php82"
+elif [ -f "/opt/cpanel/ea-php82/root/usr/bin/php" ]; then
+    PHP="/opt/cpanel/ea-php82/root/usr/bin/php"
+else
+    PHP="php"
+fi
+echo "==> PHP binary: $PHP ($($PHP -r 'echo PHP_VERSION;'))"
+
 echo "==> Checking app directory..."
 if [ ! -d "$APP_DIR" ]; then
     echo "ERROR: $APP_DIR does not exist."
@@ -24,7 +34,22 @@ cd "$APP_DIR"
 # -----------------------------------------------------------------------------
 echo ""
 echo "==> Installing PHP dependencies (production, no dev)..."
-composer install --no-dev --optimize-autoloader --no-interaction
+
+# Find composer — try common cPanel locations
+if command -v composer &>/dev/null; then
+    COMPOSER="composer"
+elif [ -f "/usr/local/bin/composer" ]; then
+    COMPOSER="/usr/local/bin/composer"
+elif [ -f "$HOME/composer.phar" ]; then
+    COMPOSER="$PHP $HOME/composer.phar"
+else
+    echo "==> Composer not found. Downloading composer.phar..."
+    curl -sS https://getcomposer.org/installer | $PHP -- --install-dir="$HOME" --filename=composer.phar
+    COMPOSER="$PHP $HOME/composer.phar"
+fi
+
+echo "==> Using: $COMPOSER"
+$COMPOSER install --no-dev --optimize-autoloader --no-interaction
 
 # -----------------------------------------------------------------------------
 # 2. .env check
@@ -44,7 +69,7 @@ APP_KEY_VALUE=$(grep "^APP_KEY=" "$APP_DIR/.env" | cut -d'=' -f2)
 if [ -z "$APP_KEY_VALUE" ]; then
     echo ""
     echo "==> Generating app key..."
-    php artisan key:generate --force
+    $PHP artisan key:generate --force
 else
     echo ""
     echo "==> App key already set, skipping."
@@ -55,7 +80,7 @@ fi
 # -----------------------------------------------------------------------------
 echo ""
 echo "==> Running database migrations..."
-php artisan migrate --force
+$PHP artisan migrate --force
 
 # -----------------------------------------------------------------------------
 # 5. Permissions
@@ -82,9 +107,9 @@ fi
 # -----------------------------------------------------------------------------
 echo ""
 echo "==> Caching config, routes, and views..."
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+$PHP artisan config:cache
+$PHP artisan route:cache
+$PHP artisan view:cache
 
 # -----------------------------------------------------------------------------
 # 8. Done
