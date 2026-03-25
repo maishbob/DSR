@@ -64,7 +64,7 @@ class DashboardController extends Controller
             ->select(
                 'credit_customers.id',
                 'credit_customers.customer_name',
-                DB::raw('COALESCE(credit_customers.initial_opening_balance,0) + COALESCE(SUM(credit_sales.total_value),0) - COALESCE(SUM(payments.amount),0) as balance')
+                DB::raw('COALESCE(MAX(credit_customers.initial_opening_balance),0) + COALESCE(SUM(credit_sales.total_value),0) - COALESCE(SUM(payments.amount),0) as balance')
             )
             ->groupBy('credit_customers.id', 'credit_customers.customer_name')
             ->having('balance', '>', 0)
