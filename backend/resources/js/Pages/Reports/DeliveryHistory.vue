@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { fmt, fmtDate } from '@/composables/useFormatters';
 
 const props = defineProps({ rows: Array, station: Object, from: String, to: String });
 
@@ -12,12 +13,7 @@ function filter() {
     router.get(route('reports.deliveries'), { from: fromDate.value, to: toDate.value });
 }
 
-function fmt(n, dec = 1) {
-    return Number(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtDate(d) {
-    return d ? new Date(d).toLocaleDateString('en-KE') : '—';
-}
+
 </script>
 
 <template>
@@ -27,11 +23,11 @@ function fmtDate(d) {
 
         <div class="bg-white rounded-xl shadow-sm p-4 mb-6 flex flex-wrap items-end gap-4">
             <div>
-                <label class="block text-xs text-gray-500 mb-1">From</label>
+                <label class="block text-xs text-gray-600 mb-1">From</label>
                 <input type="date" v-model="fromDate" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
-                <label class="block text-xs text-gray-500 mb-1">To</label>
+                <label class="block text-xs text-gray-600 mb-1">To</label>
                 <input type="date" v-model="toDate" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <button @click="filter" class="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-600">Apply</button>
@@ -59,12 +55,12 @@ function fmtDate(d) {
                         <td class="px-4 py-2 text-gray-600">{{ r.tank?.tank_name }}</td>
                         <td class="px-4 py-2 text-gray-600">{{ r.supplier_name }}</td>
                         <td class="px-4 py-2 text-gray-500">{{ r.waybill_number ?? '—' }}</td>
-                        <td class="px-4 py-2 text-right font-medium">{{ fmt(r.delivery_quantity) }}</td>
-                        <td class="px-4 py-2 text-right">{{ r.tank_dip_before ? fmt(r.tank_dip_before) : '—' }}</td>
-                        <td class="px-4 py-2 text-right">{{ r.tank_dip_after ? fmt(r.tank_dip_after) : '—' }}</td>
+                        <td class="px-4 py-2 text-right font-medium">{{ fmt(r.delivery_quantity, 1) }}</td>
+                        <td class="px-4 py-2 text-right">{{ r.tank_dip_before ? fmt(r.tank_dip_before, 1) : '—' }}</td>
+                        <td class="px-4 py-2 text-right">{{ r.tank_dip_after ? fmt(r.tank_dip_after, 1) : '—' }}</td>
                         <td class="px-4 py-2 text-right font-semibold"
                             :class="r.delivery_variance == null ? 'text-gray-400' : r.delivery_variance < 0 ? 'text-red-600' : 'text-green-600'">
-                            {{ r.delivery_variance != null ? fmt(r.delivery_variance) : '—' }}
+                            {{ r.delivery_variance != null ? fmt(r.delivery_variance, 1) : '—' }}
                         </td>
                     </tr>
                     <tr v-if="!rows?.length">

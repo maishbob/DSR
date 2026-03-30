@@ -16,7 +16,7 @@ class PosTransactionController extends Controller
         $transactions = PosTransaction::where('station_id', $station->id)
             ->orderByDesc('trans_date')
             ->orderByDesc('id')
-            ->get();
+            ->paginate(50);
 
         return Inertia::render('Pos/Index', [
             'transactions' => $transactions,

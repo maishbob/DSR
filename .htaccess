@@ -1,0 +1,9 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Don't rewrite requests that are already inside backend/public
+    RewriteCond %{REQUEST_URI} !^/backend/public/
+
+    # Internally serve everything from backend/public (URL stays clean)
+    RewriteRule ^(.*)$ /backend/public/$1 [L,QSA]
+</IfModule>

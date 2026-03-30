@@ -18,11 +18,12 @@ class CardReconController extends Controller
             ->withSum('lines', 'amount')
             ->orderByDesc('recon_date')
             ->orderByDesc('id')
-            ->get()
-            ->map(function ($r) {
-                $r->total_amount = (float) ($r->lines_sum_amount ?? 0);
-                return $r;
-            });
+            ->paginate(50);
+
+        $recons->through(function ($r) {
+            $r->total_amount = (float) ($r->lines_sum_amount ?? 0);
+            return $r;
+        });
 
         return Inertia::render('CardRecons/Index', [
             'recons' => $recons,

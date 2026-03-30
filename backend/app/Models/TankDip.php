@@ -7,6 +7,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TankDip extends Model
 {
+    public function resolveRouteBinding($value, $field = null): ?Model
+    {
+        $stationId = auth()->user()?->station_id;
+        if (! $stationId) {
+            abort(403);
+        }
+
+        return $this->where($field ?? $this->getRouteKeyName(), $value)
+            ->whereHas('shift', fn($q) => $q->where('station_id', $stationId))
+            ->firstOrFail();
+    }
     protected $fillable = ['tank_id', 'shift_id', 'dip_type', 'dip_volume', 'entered_by', 'is_locked'];
 
     protected $casts = ['dip_volume' => 'decimal:2'];

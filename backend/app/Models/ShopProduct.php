@@ -2,14 +2,20 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToStation;
 use Illuminate\Database\Eloquent\Model;
 
 class ShopProduct extends Model
 {
+    use BelongsToStation;
     protected $fillable = [
-        'station_id', 'product_name', 'unit',
-        'current_price', 'cost',
-        'forecourt_stock', 'store_stock',
+        'station_id',
+        'product_name',
+        'unit',
+        'current_price',
+        'cost',
+        'forecourt_stock',
+        'store_stock',
         'is_active',
     ];
 

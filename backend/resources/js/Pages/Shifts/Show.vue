@@ -1,7 +1,9 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ConfirmModal from '@/Components/ConfirmModal.vue';
 import { Head, useForm, Link, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import { fmt, fmt2 } from '@/composables/useFormatters';
 
 const props = defineProps({
     shift: Object,
@@ -24,11 +26,31 @@ const tabs = [
 
 const isLocked = computed(() => props.shift.status === 'locked');
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function fmt(n, dec = 3) {
-    return Number(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+// ── Confirm Modal ────────────────────────────────────────────────────────────
+const confirmModal = ref({ show: false, title: '', message: '', variant: 'danger', onConfirm: () => {} });
+
+function openConfirm({ title, message, variant = 'danger', onConfirm }) {
+    confirmModal.value = { show: true, title, message, variant, onConfirm };
 }
-function fmt2(n) { return fmt(n, 2); }
+function closeConfirm() {
+    confirmModal.value.show = false;
+}
+function handleConfirm() {
+    confirmModal.value.onConfirm();
+    closeConfirm();
+}
+
+// ── Tab counts ────────────────────────────────────────────────────────────────
+const tabCounts = computed(() => ({
+    pumps:    props.shift.meter_readings?.length ?? 0,
+    oils:     props.shift.oil_sales?.length ?? 0,
+    shortage: 0,
+    clients:  props.shift.credit_sales?.length ?? 0,
+    cards:    props.shift.card_payments?.length ?? 0,
+    pos:      props.shift.pos_transactions?.length ?? 0,
+    expenses: props.shift.expenses?.length ?? 0,
+    summary:  0,
+}));
 
 // ── Pump Readings ─────────────────────────────────────────────────────────────
 const meterForm = useForm({
@@ -90,10 +112,15 @@ function submitMeter() {
 
 function clearMeterReading() {
     if (!selectedReading.value?.id) return;
-    if (!confirm('Clear closing readings for this nozzle?')) return;
-    router.delete(route('meter-readings.destroy', selectedReading.value.id), {
-        preserveScroll: true,
-        onSuccess: () => { meterForm.reset(); selectedReading.value = null; },
+    openConfirm({
+        title: 'Clear Reading',
+        message: 'Clear closing readings for this nozzle?',
+        onConfirm: () => {
+            router.delete(route('meter-readings.destroy', selectedReading.value.id), {
+                preserveScroll: true,
+                onSuccess: () => { meterForm.reset(); selectedReading.value = null; },
+            });
+        },
     });
 }
 
@@ -153,9 +180,13 @@ function submitOilSale() {
 }
 
 function deleteOilSale(id) {
-    if (confirm('Remove this oil sale?')) {
-        router.delete(route('oil-sales.destroy', id));
-    }
+    openConfirm({
+        title: 'Remove Oil Sale',
+        message: 'Remove this oil sale?',
+        onConfirm: () => {
+            router.delete(route('oil-sales.destroy', id));
+        },
+    });
 }
 
 const totalOilSales = computed(() =>
@@ -300,9 +331,13 @@ function submitCard() {
 }
 
 function deleteCard(id) {
-    if (confirm('Remove this card payment?')) {
-        router.delete(route('card-payments.destroy', id));
-    }
+    openConfirm({
+        title: 'Remove Card Payment',
+        message: 'Remove this card payment?',
+        onConfirm: () => {
+            router.delete(route('card-payments.destroy', id));
+        },
+    });
 }
 
 const totalCardSales = computed(() =>
@@ -322,9 +357,13 @@ function submitPos() {
 }
 
 function deletePos(id) {
-    if (confirm('Remove this POS transaction?')) {
-        router.delete(route('pos-transactions.destroy', id));
-    }
+    openConfirm({
+        title: 'Remove POS Transaction',
+        message: 'Remove this POS transaction?',
+        onConfirm: () => {
+            router.delete(route('pos-transactions.destroy', id));
+        },
+    });
 }
 
 const totalPosSales = computed(() =>
@@ -344,9 +383,13 @@ function submitExpense() {
 }
 
 function deleteExpense(id) {
-    if (confirm('Remove this expense?')) {
-        router.delete(route('expenses.destroy', id));
-    }
+    openConfirm({
+        title: 'Remove Expense',
+        message: 'Remove this expense?',
+        onConfirm: () => {
+            router.delete(route('expenses.destroy', id));
+        },
+    });
 }
 
 const totalExpenses = computed(() =>
@@ -418,9 +461,13 @@ function saveCash() {
 }
 
 function generateDsr() {
-    if (confirm('Generate DSR from current data?')) {
-        router.post(route('shifts.generate-dsr', props.shift.id));
-    }
+    openConfirm({
+        title: 'Finalise DSR',
+        message: 'Generate DSR from current data?',
+        onConfirm: () => {
+            router.post(route('shifts.generate-dsr', props.shift.id));
+        },
+    });
 }
 
 </script>
@@ -474,14 +521,19 @@ function generateDsr() {
 
                 <!-- Tabs -->
                 <div class="border-b border-gray-200 mb-0">
-                    <nav class="flex flex-wrap -mb-px">
+                    <nav aria-label="Shift detail tabs" class="flex flex-wrap -mb-px">
                         <button v-for="tab in tabs" :key="tab.key"
                             @click="activeTab = tab.key"
-                            class="px-4 py-2 text-sm font-medium border-b-2 mr-1 transition-colors"
+                            class="px-4 py-2 text-sm font-medium border-b-2 mr-1 transition-colors inline-flex items-center"
                             :class="activeTab === tab.key
-                                ? 'border-blue-600 text-blue-600'
+                                ? 'border-orange-500 text-orange-500'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'">
                             {{ tab.label }}
+                            <span v-if="tabCounts[tab.key]"
+                                class="ml-1.5 px-1.5 py-0.5 text-xs rounded-full"
+                                :class="activeTab === tab.key ? 'bg-orange-400/20 text-orange-700' : 'bg-gray-100 text-gray-500'">
+                                {{ tabCounts[tab.key] }}
+                            </span>
                         </button>
                     </nav>
                 </div>
@@ -523,7 +575,7 @@ function generateDsr() {
                                     <tr class="font-semibold bg-gray-50">
                                         <td class="px-3 py-2">TOTAL</td>
                                         <td class="px-3 py-2 text-right font-mono"></td>
-                                        <td class="px-3 py-2 text-right font-mono">{{ fmt(pumpSalesTotal) }}</td>
+                                        <td class="px-3 py-2 text-right font-mono">{{ fmt(pumpSalesTotal, 3) }}</td>
                                         <td class="px-3 py-2 text-right font-mono">{{ fmt2(pumpRevenueTotal) }}</td>
                                     </tr>
                                 </tfoot>
@@ -536,7 +588,7 @@ function generateDsr() {
                             <form @submit.prevent="submitMeter" class="space-y-4">
                                 <!-- Nozzle selector -->
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Pump Nozzle</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Pump Nozzle</label>
                                     <select v-model="meterForm.nozzle_id" @change="onNozzleSelect" required
                                         class="w-full border rounded px-3 py-2 text-sm">
                                         <option value="">— Select Nozzle —</option>
@@ -658,7 +710,12 @@ function generateDsr() {
                                             <td class="px-3 py-2 text-right font-mono">{{ fmt2(sale.total_value) }}</td>
                                             <td class="px-3 py-2">
                                                 <button v-if="!isLocked" @click="deleteOilSale(sale.id)"
-                                                    class="text-red-500 text-xs hover:text-red-700">✕</button>
+                                                    aria-label="Delete oil sale"
+                                                    class="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
                                             </td>
                                         </tr>
                                         <tr v-if="!(shift.oil_sales ?? []).length">
@@ -753,32 +810,32 @@ function generateDsr() {
                                         <tbody class="text-sm divide-y divide-gray-100">
                                             <tr class="hover:bg-gray-50">
                                                 <td class="px-3 py-1.5 text-gray-600">Opening Stock</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.opening) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.opening, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(row.opening * row.price) }}</td>
                                             </tr>
                                             <tr class="hover:bg-gray-50">
                                                 <td class="px-3 py-1.5 text-gray-600">Purchase (Delivery)</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.purchase) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.purchase, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(row.purchase * row.price) }}</td>
                                             </tr>
                                             <tr v-if="row.pumpTest > 0" class="hover:bg-gray-50">
                                                 <td class="px-3 py-1.5 text-gray-600">Less: Pump Test</td>
-                                                <td class="px-3 py-1.5 text-right font-mono text-orange-600">({{ fmt(row.pumpTest) }})</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-orange-600">({{ fmt(row.pumpTest, 3) }})</td>
                                                 <td class="px-3 py-1.5 text-right font-mono text-gray-400">({{ fmt2(row.pumpTest * row.price) }})</td>
                                             </tr>
                                             <tr class="bg-blue-50 font-semibold">
                                                 <td class="px-3 py-1.5">Sub Total</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.subTotal) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.subTotal, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono">{{ fmt2(row.subTotal * row.price) }}</td>
                                             </tr>
                                             <tr class="hover:bg-gray-50">
                                                 <td class="px-3 py-1.5 text-gray-600">Less: Sales</td>
-                                                <td class="px-3 py-1.5 text-right font-mono text-red-600">({{ fmt(row.sales) }})</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-red-600">({{ fmt(row.sales, 3) }})</td>
                                                 <td class="px-3 py-1.5 text-right font-mono text-gray-400">({{ fmt2(row.sales * row.price) }})</td>
                                             </tr>
                                             <tr class="bg-blue-50 font-semibold">
                                                 <td class="px-3 py-1.5">Closing Stock (Calc.)</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.closing) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.closing, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono">{{ fmt2(row.closing * row.price) }}</td>
                                             </tr>
                                             <!-- Dip readings -->
@@ -787,7 +844,7 @@ function generateDsr() {
                                                     Dip Stock 1
                                                     <span class="text-xs text-gray-400">({{ row.tank.tank_name }})</span>
                                                 </td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.dipStock) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.dipStock, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(row.dipStock * row.price) }}</td>
                                             </tr>
                                             <tr v-if="row.linked" class="hover:bg-gray-50">
@@ -795,23 +852,23 @@ function generateDsr() {
                                                     Dip Stock 2
                                                     <span class="text-xs text-gray-400">({{ row.linked.tank_name }})</span>
                                                 </td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.dipStock2) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.dipStock2, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(row.dipStock2 * row.price) }}</td>
                                             </tr>
                                             <tr v-if="row.linked" class="bg-gray-50 font-semibold">
                                                 <td class="px-3 py-1.5">Total Dip Stock</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.totalDip) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.totalDip, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono">{{ fmt2(row.totalDip * row.price) }}</td>
                                             </tr>
                                             <!-- Variance -->
                                             <tr v-if="row.shortage > 0" class="bg-red-50">
                                                 <td class="px-3 py-1.5 font-semibold text-red-700">Shortage</td>
-                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-red-700">{{ fmt(row.shortage) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-red-700">{{ fmt(row.shortage, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono font-semibold text-red-700">{{ fmt2(row.shortage * row.price) }}</td>
                                             </tr>
                                             <tr v-if="row.excess > 0" class="bg-green-50">
                                                 <td class="px-3 py-1.5 font-semibold text-green-700">Excess</td>
-                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-green-700">{{ fmt(row.excess) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-green-700">{{ fmt(row.excess, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono font-semibold text-green-700">{{ fmt2(row.excess * row.price) }}</td>
                                             </tr>
                                             <tr v-if="row.shortage === 0 && row.excess === 0" class="bg-green-50">
@@ -829,11 +886,11 @@ function generateDsr() {
                                     <div v-for="nz in row.nozzleBreakdown" :key="nz.name"
                                         class="flex justify-between px-3 py-1.5 border-b border-gray-200 text-xs">
                                         <span class="text-gray-600 truncate mr-1">{{ nz.name }}</span>
-                                        <span class="font-mono font-medium">{{ fmt(nz.sales) }}</span>
+                                        <span class="font-mono font-medium">{{ fmt(nz.sales, 3) }}</span>
                                     </div>
                                     <div class="flex justify-between px-3 py-2 bg-gray-100 text-xs font-bold border-t">
                                         <span>Total</span>
-                                        <span class="font-mono">{{ fmt(row.sales) }}</span>
+                                        <span class="font-mono">{{ fmt(row.sales, 3) }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -844,7 +901,7 @@ function generateDsr() {
                             <h3 class="text-sm font-semibold text-gray-700 mb-3">Enter Tank Dip / Pump Test</h3>
                             <form @submit.prevent="submitDip" class="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Tank</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Tank</label>
                                     <select v-model="dipForm.tank_id" required class="w-full border rounded px-3 py-2 text-sm bg-white">
                                         <option value="">— Select Tank —</option>
                                         <option v-for="tank in (station.tanks ?? [])" :key="tank.id" :value="String(tank.id)">
@@ -853,19 +910,19 @@ function generateDsr() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Dip Type</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Dip Type</label>
                                     <select v-model="dipForm.dip_type" class="w-full border rounded px-3 py-2 text-sm bg-white">
                                         <option value="opening">Opening</option>
                                         <option value="closing">Closing</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Dip Volume (L)</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Dip Volume (L)</label>
                                     <input v-model="dipForm.dip_volume" type="number" step="0.01" required
                                         class="w-full border rounded px-3 py-2 text-sm font-mono bg-white" placeholder="0.00" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Pump Test (L)</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Pump Test (L)</label>
                                     <input v-model="dipForm.pump_test_volume" type="number" step="0.001"
                                         class="w-full border rounded px-3 py-2 text-sm font-mono bg-white" placeholder="0.000" />
                                 </div>
@@ -909,7 +966,7 @@ function generateDsr() {
                                             {{ sale.type }}
                                         </span>
                                     </td>
-                                    <td class="px-3 py-2 text-right font-mono">{{ fmt(sale.quantity) }}</td>
+                                    <td class="px-3 py-2 text-right font-mono">{{ fmt(sale.quantity, 3) }}</td>
                                     <td class="px-3 py-2 text-right font-mono text-gray-500">{{ fmt2(sale.price_applied) }}</td>
                                     <td class="px-3 py-2 text-right font-mono font-semibold">{{ fmt2(sale.total_value) }}</td>
                                     <td class="px-3 py-2 text-right font-mono text-gray-500">{{ fmt2(sale.vat_amount) }}</td>
@@ -933,7 +990,7 @@ function generateDsr() {
                             <h3 class="text-sm font-semibold text-gray-700 mb-3">Add Credit Sale</h3>
                             <form @submit.prevent="submitCreditSale" class="grid grid-cols-2 md:grid-cols-4 gap-3">
                                 <div class="col-span-2">
-                                    <label class="block text-xs text-gray-500 mb-1">Client</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Client</label>
                                     <select v-model="creditForm.credit_customer_id" required class="w-full border rounded px-3 py-2 text-sm">
                                         <option value="">— Select Client —</option>
                                         <option v-for="c in (station.credit_customers ?? [])" :key="c.id" :value="String(c.id)">
@@ -942,7 +999,7 @@ function generateDsr() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Product</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Product</label>
                                     <select v-model="creditForm.product_id" @change="onCreditProductChange" required
                                         class="w-full border rounded px-3 py-2 text-sm">
                                         <option value="">— Select Product —</option>
@@ -952,7 +1009,7 @@ function generateDsr() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Type</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Type</label>
                                     <select v-model="creditForm.type" class="w-full border rounded px-3 py-2 text-sm">
                                         <option value="fuel">Fuel</option>
                                         <option value="oil">Oil</option>
@@ -960,17 +1017,17 @@ function generateDsr() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Quantity (L)</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Quantity (L)</label>
                                     <input v-model="creditForm.quantity" type="number" step="0.001" required
                                         class="w-full border rounded px-3 py-2 text-sm font-mono" placeholder="0.000" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Price/L</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Price/L</label>
                                     <input v-model="creditForm.price_applied" type="number" step="0.0001" required
                                         class="w-full border rounded px-3 py-2 text-sm font-mono" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Vehicle Plate</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Vehicle Plate</label>
                                     <input v-model="creditForm.vehicle_plate" type="text"
                                         class="w-full border rounded px-3 py-2 text-sm" placeholder="KAA 000A" />
                                 </div>
@@ -1009,7 +1066,12 @@ function generateDsr() {
                                     <td class="px-3 py-2 font-mono text-xs text-gray-400">{{ payment.batch_ref ?? '—' }}</td>
                                     <td class="px-3 py-2">
                                         <button v-if="!isLocked" @click="deleteCard(payment.id)"
-                                            class="text-red-500 text-xs hover:text-red-700">✕</button>
+                                            aria-label="Delete card payment"
+                                            class="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
                                     </td>
                                 </tr>
                                 <tr v-if="!(shift.card_payments ?? []).length">
@@ -1029,7 +1091,7 @@ function generateDsr() {
                         <div v-if="!isLocked" class="mt-6 border-t pt-4">
                             <form @submit.prevent="submitCard" class="grid grid-cols-2 md:grid-cols-3 gap-3">
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Card Name</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Card Name</label>
                                     <input v-model="cardForm.card_name" required list="card-names"
                                         class="w-full border rounded px-3 py-2 text-sm" placeholder="EQUITY" />
                                     <datalist id="card-names">
@@ -1039,27 +1101,27 @@ function generateDsr() {
                                     </datalist>
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Trans Date</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Trans Date</label>
                                     <input v-model="cardForm.trans_date" type="date" required
                                         class="w-full border rounded px-3 py-2 text-sm" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Reference</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Reference</label>
                                     <input v-model="cardForm.reference" required
                                         class="w-full border rounded px-3 py-2 text-sm font-mono" placeholder="Transaction ref" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Amount</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Amount</label>
                                     <input v-model="cardForm.amount" type="number" step="0.01" required
                                         class="w-full border rounded px-3 py-2 text-sm font-mono" placeholder="0.00" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Recon Date <span class="text-gray-400">(optional)</span></label>
+                                    <label class="block text-xs text-gray-600 mb-1">Recon Date <span class="text-gray-400">(optional)</span></label>
                                     <input v-model="cardForm.recon_date" type="date"
                                         class="w-full border rounded px-3 py-2 text-sm" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Batch Ref <span class="text-gray-400">(optional)</span></label>
+                                    <label class="block text-xs text-gray-600 mb-1">Batch Ref <span class="text-gray-400">(optional)</span></label>
                                     <div class="flex gap-2">
                                         <input v-model="cardForm.batch_ref"
                                             class="flex-1 border rounded px-3 py-2 text-sm font-mono" placeholder="Bank batch ref" />
@@ -1089,7 +1151,12 @@ function generateDsr() {
                                     <td class="px-3 py-2 text-right font-mono">{{ fmt2(tx.amount) }}</td>
                                     <td class="px-3 py-2">
                                         <button v-if="!isLocked" @click="deletePos(tx.id)"
-                                            class="text-red-500 text-xs hover:text-red-700">✕</button>
+                                            aria-label="Delete POS transaction"
+                                            class="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
                                     </td>
                                 </tr>
                                 <tr v-if="!(shift.pos_transactions ?? []).length">
@@ -1108,12 +1175,12 @@ function generateDsr() {
                         <div v-if="!isLocked" class="mt-6 border-t pt-4">
                             <form @submit.prevent="submitPos" class="flex gap-3">
                                 <div class="flex-1">
-                                    <label class="block text-xs text-gray-500 mb-1">POS Reference</label>
+                                    <label class="block text-xs text-gray-600 mb-1">POS Reference</label>
                                     <input v-model="posForm.reference" required
                                         class="w-full border rounded px-3 py-2 text-sm font-mono" placeholder="Slip reference" />
                                 </div>
                                 <div class="flex-1">
-                                    <label class="block text-xs text-gray-500 mb-1">Amount</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Amount</label>
                                     <input v-model="posForm.amount" type="number" step="0.01" required
                                         class="w-full border rounded px-3 py-2 text-sm font-mono" placeholder="0.00" />
                                 </div>
@@ -1143,7 +1210,12 @@ function generateDsr() {
                                     <td class="px-3 py-2 text-right font-mono">{{ fmt2(expense.amount) }}</td>
                                     <td class="px-3 py-2">
                                         <button v-if="!isLocked" @click="deleteExpense(expense.id)"
-                                            class="text-red-500 text-xs hover:text-red-700">✕</button>
+                                            aria-label="Delete expense"
+                                            class="text-red-500 hover:text-red-700 transition-colors">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
                                     </td>
                                 </tr>
                                 <tr v-if="!(shift.expenses ?? []).length">
@@ -1162,12 +1234,12 @@ function generateDsr() {
                         <div v-if="!isLocked" class="mt-6 border-t pt-4">
                             <form @submit.prevent="submitExpense" class="flex gap-3">
                                 <div class="flex-1">
-                                    <label class="block text-xs text-gray-500 mb-1">Expense Item</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Expense Item</label>
                                     <input v-model="expenseForm.expense_item" required
                                         class="w-full border rounded px-3 py-2 text-sm" placeholder="Description" />
                                 </div>
                                 <div class="w-40">
-                                    <label class="block text-xs text-gray-500 mb-1">Amount</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Amount</label>
                                     <input v-model="expenseForm.amount" type="number" step="0.01" required
                                         class="w-full border rounded px-3 py-2 text-sm font-mono" placeholder="0.00" />
                                 </div>
@@ -1198,7 +1270,7 @@ function generateDsr() {
                                     <tr v-for="row in fuelSummary" :key="row.name" class="text-gray-700">
                                         <td class="py-1 uppercase">{{ row.name }}</td>
                                         <td class="py-1 text-right font-mono">{{ row.litres > 0 ? fmt2(row.revenue) : '' }}</td>
-                                        <td class="py-1 text-right font-mono">{{ row.litres > 0 ? fmt(row.litres) : '' }}</td>
+                                        <td class="py-1 text-right font-mono">{{ row.litres > 0 ? fmt(row.litres, 3) : '' }}</td>
                                         <td class="py-1 text-right font-mono"></td>
                                     </tr>
                                 </tbody>
@@ -1206,7 +1278,7 @@ function generateDsr() {
                                     <tr class="font-bold border-t border-gray-300">
                                         <td class="py-2">Total Fuel Sales:</td>
                                         <td class="py-2 text-right font-mono">{{ fmt2(totalFuelRevenue) }}</td>
-                                        <td class="py-2 text-right font-mono">{{ fmt(totalFuelLitres) }}</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt(totalFuelLitres, 3) }}</td>
                                         <td class="py-2 text-right font-mono">0.00</td>
                                     </tr>
                                 </tfoot>

@@ -2,16 +2,27 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToStation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Delivery extends Model
 {
+    use BelongsToStation;
     protected $fillable = [
-        'station_id', 'product_id', 'tank_id', 'shift_id',
-        'delivery_date', 'supplier_name', 'waybill_number',
-        'delivery_quantity', 'tank_dip_before', 'tank_dip_after',
-        'delivery_variance', 'notes', 'entered_by',
+        'station_id',
+        'product_id',
+        'tank_id',
+        'shift_id',
+        'delivery_date',
+        'supplier_name',
+        'waybill_number',
+        'delivery_quantity',
+        'tank_dip_before',
+        'tank_dip_after',
+        'delivery_variance',
+        'notes',
+        'entered_by',
     ];
 
     protected $casts = [

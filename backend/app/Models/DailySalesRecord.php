@@ -2,31 +2,57 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToStation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DailySalesRecord extends Model
 {
+    use BelongsToStation;
     protected $fillable = [
-        'shift_id', 'station_id', 'shift_date', 'shift_type',
-        'serial_number', 'dsr_covers_days',
-        'prepared_by', 'verified_by',
+        'shift_id',
+        'station_id',
+        'shift_date',
+        'shift_type',
+        'serial_number',
+        'dsr_covers_days',
+        'prepared_by',
+        'verified_by',
         // Fuel stock
-        'total_litres_sold', 'total_revenue', 'total_deliveries',
-        'expected_stock', 'actual_stock', 'variance',
+        'total_litres_sold',
+        'total_revenue',
+        'total_deliveries',
+        'expected_stock',
+        'actual_stock',
+        'variance',
         // Payment channels
-        'total_credit_sales', 'total_card_sales', 'total_pos_sales',
-        'cash_collected', 'mpesa_collected',
+        'total_credit_sales',
+        'total_card_sales',
+        'total_pos_sales',
+        'cash_collected',
+        'mpesa_collected',
         // Other
-        'total_oil_sales', 'total_expenses',
-        'z_amount_a', 'z_amount_b', 'z_amount_d',
+        'total_oil_sales',
+        'total_expenses',
+        'z_amount_a',
+        'z_amount_b',
+        'z_amount_d',
         // Summary
-        'total_fuel_sales', 'gross_sales', 'net_sales_balance',
+        'total_fuel_sales',
+        'gross_sales',
+        'net_sales_balance',
         // Variance + override
-        'variance_status', 'override_reason', 'override_by', 'override_at',
+        'variance_status',
+        'override_reason',
+        'override_by',
+        'override_at',
         // Meta
-        'product_breakdown', 'generated_at', 'approved_at', 'approved_by', 'locked',
+        'product_breakdown',
+        'generated_at',
+        'approved_at',
+        'approved_by',
+        'locked',
     ];
 
     protected $casts = [

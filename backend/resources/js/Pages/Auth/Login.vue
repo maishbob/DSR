@@ -25,26 +25,21 @@ const submit = () => {
     <div class="min-h-screen flex">
 
         <!-- Left panel — brand -->
-        <div class="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col justify-between relative overflow-hidden"
-            style="background: linear-gradient(135deg, #111827 0%, #1f2937 50%, #111827 100%);">
+        <div class="hidden lg:flex lg:w-1/2 xl:w-3/5 flex-col justify-between relative overflow-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
 
             <!-- Subtle grid pattern -->
-            <div class="absolute inset-0 opacity-5"
-                style="background-image: linear-gradient(#f97316 1px, transparent 1px), linear-gradient(90deg, #f97316 1px, transparent 1px); background-size: 40px 40px;"></div>
+            <div class="absolute inset-0 opacity-5 bg-[length:40px_40px] bg-[image:linear-gradient(theme(colors.orange.500)_1px,transparent_1px),linear-gradient(90deg,theme(colors.orange.500)_1px,transparent_1px)]"></div>
 
             <!-- Large decorative circle -->
-            <div class="absolute -bottom-32 -left-32 w-96 h-96 rounded-full opacity-10"
-                style="background: radial-gradient(circle, #f97316, transparent);"></div>
-            <div class="absolute -top-20 -right-20 w-72 h-72 rounded-full opacity-10"
-                style="background: radial-gradient(circle, #f97316, transparent);"></div>
+            <div class="absolute -bottom-32 -left-32 w-96 h-96 rounded-full opacity-10 bg-[radial-gradient(circle,theme(colors.orange.500),transparent)]"></div>
+            <div class="absolute -top-20 -right-20 w-72 h-72 rounded-full opacity-10 bg-[radial-gradient(circle,theme(colors.orange.500),transparent)]"></div>
 
             <!-- Content -->
             <div class="relative z-10 flex flex-col justify-center h-full px-14 xl:px-20">
 
                 <!-- Logo mark -->
                 <div class="flex items-center gap-3 mb-16">
-                    <div class="w-10 h-10 rounded-xl flex items-center justify-center"
-                        style="background: #f97316;">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-orange-500">
                         <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round"
                                 d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6.75v6.75" />
@@ -57,7 +52,7 @@ const submit = () => {
                 <div class="mb-12">
                     <h1 class="text-4xl xl:text-5xl font-bold text-white leading-tight mb-4">
                         Daily Sales<br/>
-                        <span style="color: #f97316;">Reconciliation</span>
+                        <span class="text-orange-500">Reconciliation</span>
                     </h1>
                     <p class="text-gray-400 text-lg leading-relaxed max-w-md">
                         Complete fuel station management — meter readings, stock reconciliation, credit accounts, and auditable DSR reports.
@@ -68,16 +63,15 @@ const submit = () => {
                 <div class="flex flex-wrap gap-2 mb-12">
                     <span v-for="f in ['Shift Management', 'Stock Variance', 'Credit Accounts', 'Cash Reconciliation', 'DSR Reports']"
                         :key="f"
-                        class="px-3 py-1.5 rounded-full text-xs font-medium border"
-                        style="border-color: #374151; color: #9ca3af; background: rgba(249,115,22,0.08);">
+                        class="px-3 py-1.5 rounded-full text-xs font-medium border border-gray-700 text-gray-400 bg-orange-500/[0.08]">
                         {{ f }}
                     </span>
                 </div>
 
                 <!-- Stats strip -->
-                <div class="grid grid-cols-3 gap-6 pt-8 border-t" style="border-color: #1f2937;">
+                <div class="grid grid-cols-3 gap-6 pt-8 border-t border-gray-800">
                     <div>
-                        <p class="text-2xl font-bold" style="color: #f97316;">Live</p>
+                        <p class="text-2xl font-bold text-orange-500">Live</p>
                         <p class="text-xs text-gray-500 mt-0.5">Real-time data</p>
                     </div>
                     <div>
@@ -103,8 +97,7 @@ const submit = () => {
 
                 <!-- Mobile logo -->
                 <div class="flex items-center gap-2 mb-10 lg:hidden">
-                    <div class="w-8 h-8 rounded-lg flex items-center justify-center"
-                        style="background: #f97316;">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-orange-500">
                         <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round"
                                 d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6.75v6.75" />
@@ -184,10 +177,7 @@ const submit = () => {
                     <button
                         type="submit"
                         :disabled="form.processing"
-                        class="w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                        style="background: #f97316;"
-                        onmouseover="this.style.background='#ea6c0a'"
-                        onmouseout="this.style.background='#f97316'">
+                        class="w-full rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed bg-orange-500 hover:bg-orange-600">
                         <span v-if="form.processing" class="flex items-center justify-center gap-2">
                             <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>

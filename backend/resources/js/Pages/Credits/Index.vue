@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, Link } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { fmt } from '@/composables/useFormatters';
 
 const props = defineProps({
     customers: Array,
@@ -31,9 +32,7 @@ function submit() {
     });
 }
 
-function fmt(n, dec = 2) {
-    return Number(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
+
 </script>
 
 <template>
@@ -56,59 +55,59 @@ function fmt(n, dec = 2) {
             <form @submit.prevent="submit" class="space-y-4">
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Customer Name *</label>
+                        <label class="block text-xs text-gray-600 mb-1">Customer Name *</label>
                         <input type="text" v-model="form.customer_name" required
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         <p v-if="form.errors.customer_name" class="text-red-500 text-xs mt-1">{{ form.errors.customer_name }}</p>
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Contact Person</label>
+                        <label class="block text-xs text-gray-600 mb-1">Contact Person</label>
                         <input type="text" v-model="form.contact"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Phone</label>
+                        <label class="block text-xs text-gray-600 mb-1">Phone</label>
                         <input type="tel" v-model="form.phone"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="0700000000" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Email</label>
+                        <label class="block text-xs text-gray-600 mb-1">Email</label>
                         <input type="email" v-model="form.email"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">City / Town</label>
+                        <label class="block text-xs text-gray-600 mb-1">City / Town</label>
                         <input type="text" v-model="form.city"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Address</label>
+                        <label class="block text-xs text-gray-600 mb-1">Address</label>
                         <input type="text" v-model="form.address"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">KRA PIN</label>
+                        <label class="block text-xs text-gray-600 mb-1">KRA PIN</label>
                         <input type="text" v-model="form.pin"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="P123456789A" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">VAT Number</label>
+                        <label class="block text-xs text-gray-600 mb-1">VAT Number</label>
                         <input type="text" v-model="form.vat_number"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Credit Limit (KES) *</label>
+                        <label class="block text-xs text-gray-600 mb-1">Credit Limit (KES) *</label>
                         <input type="number" v-model="form.credit_limit" required min="0" step="0.01"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Opening Balance (KES)</label>
+                        <label class="block text-xs text-gray-600 mb-1">Opening Balance (KES)</label>
                         <input type="number" v-model="form.initial_opening_balance" step="0.01"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                             placeholder="0.00" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Discount Multiplier (0–1)</label>
+                        <label class="block text-xs text-gray-600 mb-1">Discount Multiplier (0–1)</label>
                         <input type="number" v-model="form.discount_multiplier" min="0" max="1" step="0.0001"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                             placeholder="e.g. 0.05 = 5%" />

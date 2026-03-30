@@ -17,7 +17,7 @@ class PaymentController extends Controller
             ->select('payments.*', 'credit_customers.customer_name')
             ->orderByDesc('payment_date')
             ->orderByDesc('payments.id')
-            ->get();
+            ->paginate(50);
 
         return Inertia::render('Payments/Index', [
             'payments' => $payments,

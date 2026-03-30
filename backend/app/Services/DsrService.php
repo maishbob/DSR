@@ -176,7 +176,7 @@ class DsrService
 
             // Payments aren't shift-linked, so match by station + shift date
             Payment::where('station_id', $shift->station_id)
-                ->whereDate('created_at', $shift->shift_date)
+                ->whereDate('payment_date', $shift->shift_date)
                 ->update(['is_locked' => true]);
 
             // 4. Write fuel sales to the financial ledger

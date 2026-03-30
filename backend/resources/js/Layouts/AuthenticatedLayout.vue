@@ -4,6 +4,8 @@ import { Link, usePage, router } from '@inertiajs/vue3';
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
+const currentStation = computed(() => page.props.currentStation);
+const isOwner = computed(() => user.value?.role === 'owner');
 
 // ── Sidebar state ──────────────────────────────────────────────
 const sidebarOpen   = ref(false);
@@ -131,7 +133,8 @@ function toggleGroup(label) {
                 </Link>
                 <button @click="togglePin"
                     class="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors"
-                    :title="sidebarPinned ? 'Unpin sidebar' : 'Pin sidebar'">
+                    :title="sidebarPinned ? 'Unpin sidebar' : 'Pin sidebar'"
+                    :aria-label="sidebarPinned ? 'Unpin sidebar' : 'Pin sidebar'">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                     </svg>
@@ -139,13 +142,14 @@ function toggleGroup(label) {
             </div>
 
             <!-- Nav -->
-            <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-5">
+            <nav aria-label="Main navigation" class="flex-1 overflow-y-auto py-4 px-3 space-y-5">
                 <template v-for="group in navGroups" :key="group.label">
 
                     <!-- Collapsible group -->
                     <div v-if="group.collapsible">
                         <p class="px-2 mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">{{ group.label }}</p>
                         <button @click="toggleGroup(group.label)"
+                            :aria-expanded="openGroup === group.label"
                             class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
                             :class="openGroup === group.label ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'">
                             <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
@@ -206,7 +210,8 @@ function toggleGroup(label) {
                     </div>
                     <Link :href="route('logout')" method="post" as="button"
                         class="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors"
-                        title="Sign out">
+                        title="Sign out"
+                        aria-label="Sign out">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                         </svg>
@@ -221,6 +226,7 @@ function toggleGroup(label) {
             <!-- Top navbar -->
             <header class="sticky top-0 z-20 bg-white border-b border-gray-200 h-16 flex items-center gap-4 px-4 lg:px-6 shadow-sm flex-shrink-0">
                 <button @click="sidebarOpen = !sidebarOpen"
+                    aria-label="Toggle navigation menu"
                     class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
                     :class="sidebarPinned ? 'lg:hidden' : ''">
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -233,6 +239,21 @@ function toggleGroup(label) {
                 </div>
 
                 <div class="flex items-center gap-3 flex-shrink-0">
+                    <!-- Station indicator + switch (owners) -->
+                    <div v-if="currentStation" class="hidden sm:flex items-center gap-2">
+                        <div class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-full">
+                            <svg class="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016A3.001 3.001 0 0021 9.349m-18 0V7.875C3 6.839 3.839 6 4.875 6h14.25C20.161 6 21 6.839 21 7.875v1.474" />
+                            </svg>
+                            <span class="text-xs font-medium text-slate-700">{{ currentStation.station_name }}</span>
+                        </div>
+                        <Link v-if="isOwner" :href="route('select-station')"
+                            class="text-xs text-orange-600 hover:text-orange-700 font-medium hover:underline">
+                            Switch
+                        </Link>
+                    </div>
+
                     <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-full">
                         <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                         <span class="text-xs font-medium text-orange-700">Live</span>
@@ -266,6 +287,8 @@ function toggleGroup(label) {
             enter-from-class="opacity-0 translate-y-2 scale-95"
             leave-to-class="opacity-0 translate-y-2 scale-95">
             <div v-if="toast"
+                role="status"
+                aria-live="polite"
                 class="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border max-w-sm"
                 :class="toastType === 'success' ? 'bg-white border-green-200 text-green-800' : 'bg-white border-red-200 text-red-800'">
                 <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
@@ -278,7 +301,7 @@ function toggleGroup(label) {
                     </svg>
                 </div>
                 <p class="text-sm font-medium flex-1">{{ toast }}</p>
-                <button @click="toast = null" class="text-gray-400 hover:text-gray-600">
+                <button @click="toast = null" aria-label="Dismiss notification" class="text-gray-400 hover:text-gray-600">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>

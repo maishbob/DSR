@@ -1,0 +1,51 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php --version)",
+      "Bash(composer --version)",
+      "Bash(npm --version)",
+      "Bash(composer create-project:*)",
+      "Bash(php artisan:*)",
+      "Bash(composer require:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(where php:*)",
+      "Read(//c/laragon/bin/php/**)",
+      "Bash(mysql -u root -pdanzo2000 -e \"CREATE DATABASE IF NOT EXISTS dsr_saas CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\")",
+      "Bash(mysql -u root -pdanzo2000 dsr_saas -e \"SHOW TABLES;\")",
+      "Read(//c/laragon/etc/apache2/sites-enabled/**)",
+      "Read(//c/laragon/etc/apache2/**)",
+      "Bash(\"C:/laragon/bin/apache/httpd-2.4.62-240918-win64-VS17/bin/httpd.exe\" -k restart)",
+      "Bash(net stop:*)",
+      "Bash(net start:*)",
+      "Read(//c/laragon/bin/apache/**)",
+      "Bash(\"C:/laragon/bin/apache/httpd-2.4.62-240904-win64-VS17/bin/httpd.exe\" -k restart)",
+      "Bash(sc query:*)",
+      "Bash(tasklist)",
+      "Bash(wmic process:*)",
+      "Bash(\"C:/laragon/bin/apache/httpd-2.4.47-win64-VS16/bin/httpd.exe\" -k restart)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//c/laragon/www/DSR/backend/database/migrations/**)",
+      "Bash(done)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost/DSR/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost/)",
+      "Bash(curl -s -o /dev/null -w \"\\\\n%{http_code}\" http://dsr.test/)",
+      "Bash(gh repo:*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(t[''''name'''']\\) for t in d.get\\(''''tables'''',[]\\)]\")",
+      "Bash(mysql -u root dsr -e \"SHOW TABLES;\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(grep -n \"cash_collected\\\\|mpesa_collected\" app/Http/Controllers/*.php app/Services/*.php)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://dsr.test/)",
+      "Bash(zip -r deploy/backend.zip backend/ --exclude \"backend/node_modules/*\" --exclude \"backend/.git/*\" --exclude \"backend/storage/logs/*.log\" --exclude \"backend/.env\")",
+      "Bash(powershell -Command \":*)",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 5; $dest = ''C:\\\\laragon\\\\www\\\\DSR\\\\deploy\\\\backend.zip''; Write-Host \\(''Size: '' + [math]::Round\\(\\(Get-Item $dest\\).Length / 1MB, 1\\) + '' MB''\\)\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\laragon\\\\www\\\\DSR\\\\deploy\\\\make_zip.ps1\")"
+    ],
+    "additionalDirectories": [
+      "C:\\laragon\\etc\\apache2\\sites-enabled"
+    ]
+  }
+}

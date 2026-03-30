@@ -2,13 +2,21 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToStation;
 use Illuminate\Database\Eloquent\Model;
 
 class StockTransaction extends Model
 {
+    use BelongsToStation;
     protected $fillable = [
-        'shop_product_id', 'station_id', 'type',
-        'trans_date', 'quantity', 'document_ref', 'notes', 'entered_by',
+        'shop_product_id',
+        'station_id',
+        'type',
+        'trans_date',
+        'quantity',
+        'document_ref',
+        'notes',
+        'entered_by',
     ];
 
     protected $casts = [

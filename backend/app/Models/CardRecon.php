@@ -2,14 +2,20 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToStation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CardRecon extends Model
 {
+    use BelongsToStation;
     protected $fillable = [
-        'station_id', 'card_name', 'batch_ref', 'recon_date', 'created_by',
+        'station_id',
+        'card_name',
+        'batch_ref',
+        'recon_date',
+        'created_by',
     ];
 
     protected $casts = [

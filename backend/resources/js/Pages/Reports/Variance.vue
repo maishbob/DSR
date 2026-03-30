@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { fmt, fmtDate } from '@/composables/useFormatters';
 
 const props = defineProps({ rows: Array, station: Object, from: String, to: String });
 
@@ -12,12 +13,7 @@ function filter() {
     router.get(route('reports.variance'), { from: fromDate.value, to: toDate.value });
 }
 
-function fmt(n, dec = 1) {
-    return Number(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtDate(d) {
-    return d ? new Date(d).toLocaleDateString('en-KE') : '—';
-}
+
 </script>
 
 <template>
@@ -27,11 +23,11 @@ function fmtDate(d) {
 
         <div class="bg-white rounded-xl shadow-sm p-4 mb-6 flex flex-wrap items-end gap-4">
             <div>
-                <label class="block text-xs text-gray-500 mb-1">From</label>
+                <label class="block text-xs text-gray-600 mb-1">From</label>
                 <input type="date" v-model="fromDate" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
-                <label class="block text-xs text-gray-500 mb-1">To</label>
+                <label class="block text-xs text-gray-600 mb-1">To</label>
                 <input type="date" v-model="toDate" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <button @click="filter" class="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-600">Apply</button>
@@ -59,11 +55,11 @@ function fmtDate(d) {
                         <td class="px-4 py-2 text-gray-700">{{ fmtDate(r.date) }}</td>
                         <td class="px-4 py-2 capitalize">{{ r.shift_type }}</td>
                         <td class="px-4 py-2 font-medium">{{ r.product }}</td>
-                        <td class="px-4 py-2 text-right">{{ fmt(r.expected_stock) }}</td>
-                        <td class="px-4 py-2 text-right">{{ fmt(r.actual_stock) }}</td>
+                        <td class="px-4 py-2 text-right">{{ fmt(r.expected_stock, 1) }}</td>
+                        <td class="px-4 py-2 text-right">{{ fmt(r.actual_stock, 1) }}</td>
                         <td class="px-4 py-2 text-right font-bold text-lg"
                             :class="r.variance < 0 ? 'text-red-600' : 'text-green-600'">
-                            {{ fmt(r.variance) }}
+                            {{ fmt(r.variance, 1) }}
                         </td>
                         <td class="px-4 py-2 text-right">
                             <span class="px-2 py-0.5 text-xs rounded-full font-medium"

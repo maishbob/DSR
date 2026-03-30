@@ -2,15 +2,25 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToStation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Tank extends Model
 {
+    use BelongsToStation;
     protected $fillable = [
-        'station_id', 'product_id', 'tank_name', 'tank_capacity', 'linked_tank_id', 'is_active',
-        'is_complex', 'last_closing_stock', 'last_dip_stock', 'last_dip_2',
+        'station_id',
+        'product_id',
+        'tank_name',
+        'tank_capacity',
+        'linked_tank_id',
+        'is_active',
+        'is_complex',
+        'last_closing_stock',
+        'last_dip_stock',
+        'last_dip_2',
     ];
 
     protected $casts = [

@@ -66,6 +66,8 @@ class DsrController extends Controller
      */
     public function approve(Request $request, DailySalesRecord $dsr)
     {
+        abort_unless($request->user()->isManager(), 403, 'Only managers can approve DSRs.');
+
         if ($dsr->locked) {
             return back()->withErrors(['dsr' => 'DSR is already locked.']);
         }
@@ -98,6 +100,8 @@ class DsrController extends Controller
      */
     public function storeAdjustment(Request $request, DailySalesRecord $dsr)
     {
+        abort_unless($request->user()->isManager(), 403, 'Only managers can add adjustments.');
+
         if (!$dsr->locked) {
             return back()->withErrors(['dsr' => 'Adjustments can only be added to locked DSRs.']);
         }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DailySalesRecord;
 use App\Models\Delivery;
 use App\Models\Shift;
+use App\Models\Station;
 use App\Services\ReportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +18,13 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $user    = $request->user();
-        $station = $user->station;
+        $station = $this->resolveStation($user, $request);
+
+        // Owner with no station selected → station picker
+        if (! $station) {
+            return redirect()->route('select-station');
+        }
+
         $today   = now()->toDateString();
 
         // Today's DSR totals
@@ -59,14 +66,14 @@ class DashboardController extends Controller
         $topDebtors = DB::table('credit_customers')
             ->where('credit_customers.station_id', $station->id)
             ->where('credit_customers.is_active', true)
-            ->leftJoin('credit_sales', 'credit_customers.id', '=', 'credit_sales.credit_customer_id')
-            ->leftJoin('payments', 'credit_customers.id', '=', 'payments.credit_customer_id')
             ->select(
                 'credit_customers.id',
                 'credit_customers.customer_name',
-                DB::raw('COALESCE(MAX(credit_customers.initial_opening_balance),0) + COALESCE(SUM(credit_sales.total_value),0) - COALESCE(SUM(payments.amount),0) as balance')
+                DB::raw('credit_customers.initial_opening_balance
+                    + COALESCE((SELECT SUM(cs.total_value) FROM credit_sales cs WHERE cs.credit_customer_id = credit_customers.id), 0)
+                    - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.credit_customer_id = credit_customers.id), 0)
+                    as balance')
             )
-            ->groupBy('credit_customers.id', 'credit_customers.customer_name')
             ->having('balance', '>', 0)
             ->orderByDesc('balance')
             ->limit(5)
@@ -99,5 +106,78 @@ class DashboardController extends Controller
             'from'         => $from,
             'to'           => $to,
         ]);
+    }
+
+    /**
+     * Show station picker for owners.
+     */
+    public function selectStation(Request $request)
+    {
+        $user  = $request->user();
+        $owner = $user->ownedAccount;
+
+        if (! $owner) {
+            // Non-owner users shouldn't be here — send them to dashboard
+            return redirect()->route('dashboard');
+        }
+
+        $stations = $owner->stations()->orderBy('station_name')->get();
+
+        // If owner has exactly one station, auto-select it
+        if ($stations->count() === 1) {
+            $request->session()->put('station_id', $stations->first()->id);
+            return redirect()->route('dashboard');
+        }
+
+        return Inertia::render('SelectStation', [
+            'owner'    => $owner,
+            'stations' => $stations,
+        ]);
+    }
+
+    /**
+     * Set the active station in session for owner users.
+     */
+    public function switchStation(Request $request)
+    {
+        $request->validate([
+            'station_id' => 'required|integer|exists:stations,id',
+        ]);
+
+        $user  = $request->user();
+        $owner = $user->ownedAccount;
+
+        // Verify the station belongs to this owner
+        if (! $owner || ! $owner->stations()->where('id', $request->station_id)->exists()) {
+            abort(403);
+        }
+
+        $request->session()->put('station_id', (int) $request->station_id);
+
+        return redirect()->route('dashboard');
+    }
+
+    /**
+     * Resolve the effective station for the current user.
+     * Owners can switch stations via session; other users use their assigned station.
+     */
+    private function resolveStation($user, Request $request): ?Station
+    {
+        if ($user->isOwner() && $user->ownedAccount) {
+            $sessionStationId = $request->session()->get('station_id');
+
+            if ($sessionStationId) {
+                $station = $user->ownedAccount->stations()->where('id', $sessionStationId)->first();
+                if ($station) {
+                    return $station;
+                }
+                // Invalid session station — clear it
+                $request->session()->forget('station_id');
+            }
+
+            return null;
+        }
+
+        return $user->station;
     }
 }

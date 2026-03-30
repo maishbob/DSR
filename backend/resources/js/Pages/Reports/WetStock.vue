@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import { fmt, fmtDate } from '@/composables/useFormatters';
 
 const props = defineProps({
     rows: Array,
@@ -17,12 +18,7 @@ function filter() {
     router.get(route('reports.wet-stock'), { from: fromDate.value, to: toDate.value });
 }
 
-function fmt(n, dec = 2) {
-    return Number(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtDate(d) {
-    return d ? new Date(d).toLocaleDateString('en-KE') : '—';
-}
+
 </script>
 
 <template>
@@ -35,11 +31,11 @@ function fmtDate(d) {
         <!-- Filters -->
         <div class="bg-white rounded-xl shadow-sm p-4 mb-6 flex flex-wrap items-end gap-4">
             <div>
-                <label class="block text-xs text-gray-500 mb-1">From</label>
+                <label class="block text-xs text-gray-600 mb-1">From</label>
                 <input type="date" v-model="fromDate" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
-                <label class="block text-xs text-gray-500 mb-1">To</label>
+                <label class="block text-xs text-gray-600 mb-1">To</label>
                 <input type="date" v-model="toDate" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <button @click="filter" class="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-600">

@@ -1,11 +1,21 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ConfirmModal from '@/Components/ConfirmModal.vue';
 import { Head, useForm, Link, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import { fmt, fmtDate } from '@/composables/useFormatters';
 
 const props = defineProps({
-    payments: Array,
+    payments: Object,
 });
+
+// ── Confirm modal ─────────────────────────────────────────────
+const confirmModal = ref({ show: false, title: '', message: '', variant: 'danger', onConfirm: () => {} });
+function openConfirm({ title, message, variant = 'danger', onConfirm }) {
+    confirmModal.value = { show: true, title, message, variant, onConfirm };
+}
+function closeConfirm() { confirmModal.value.show = false; }
+function handleConfirm() { confirmModal.value.onConfirm(); closeConfirm(); }
 
 // ── Edit modal ────────────────────────────────────────────────
 const editTarget = ref(null);
@@ -38,8 +48,11 @@ function submitEdit() {
 }
 
 function deletePayment(p) {
-    if (!confirm(`Delete payment of KES ${fmt(p.amount)} for ${p.customer_name}?`)) return;
-    router.delete(route('payments.destroy', p.id), { preserveScroll: true });
+    openConfirm({
+        title: 'Delete Payment',
+        message: `Delete payment of KES ${fmt(p.amount)} for ${p.customer_name}?`,
+        onConfirm: () => router.delete(route('payments.destroy', p.id), { preserveScroll: true }),
+    });
 }
 
 // ── Trans type labels ─────────────────────────────────────────
@@ -61,14 +74,6 @@ const methodLabel = {
     other:          'Other',
 };
 
-// ── Helpers ────────────────────────────────────────────────────
-function fmt(n, dec = 2) {
-    return Number(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtDate(d) {
-    if (!d) return '—';
-    return new Date(d + 'T00:00:00').toLocaleDateString('en-KE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
 
 const transTypeColor = {
     receipts: 'bg-green-100 text-green-700',
@@ -88,7 +93,7 @@ const transTypeColor = {
 
         <!-- Toolbar -->
         <div class="flex items-center justify-between mb-5">
-            <p class="text-sm text-gray-500">{{ payments.length }} transaction(s)</p>
+            <p class="text-sm text-gray-500">{{ payments.total }} transaction(s)</p>
             <Link :href="route('credits.index')"
                 class="text-sm text-orange-600 hover:underline">
                 ← Credit Accounts
@@ -112,7 +117,7 @@ const transTypeColor = {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="p in payments" :key="p.id"
+                        <tr v-for="p in payments.data" :key="p.id"
                             class="border-t border-gray-100 hover:bg-gray-50">
                             <td class="px-4 py-2.5 text-gray-600 whitespace-nowrap">{{ fmtDate(p.payment_date) }}</td>
                             <td class="px-4 py-2.5 font-medium text-gray-800">
@@ -147,25 +152,36 @@ const transTypeColor = {
                                 </button>
                             </td>
                         </tr>
-                        <tr v-if="!payments?.length">
+                        <tr v-if="!payments.data?.length">
                             <td colspan="8" class="px-4 py-10 text-center text-gray-400">
                                 No payments recorded.
                             </td>
                         </tr>
                     </tbody>
                     <!-- Footer totals -->
-                    <tfoot v-if="payments?.length" class="bg-gray-50 border-t-2 border-gray-300">
+                    <tfoot v-if="payments.data?.length" class="bg-gray-50 border-t-2 border-gray-300">
                         <tr>
                             <td colspan="6" class="px-4 py-3 text-sm font-semibold text-gray-600">
                                 Total Receipts
                             </td>
                             <td class="px-4 py-3 text-right font-bold text-green-700">
-                                {{ fmt(payments.filter(p => p.trans_type === 'receipts').reduce((s, p) => s + Number(p.amount), 0)) }}
+                                {{ fmt(payments.data.filter(p => p.trans_type === 'receipts').reduce((s, p) => s + Number(p.amount), 0)) }}
                             </td>
                             <td></td>
                         </tr>
                     </tfoot>
                 </table>
+            </div>
+
+            <!-- Pagination -->
+            <div v-if="payments.last_page > 1" class="px-4 py-3 border-t flex justify-between items-center text-sm">
+                <span class="text-gray-500">Page {{ payments.current_page }} of {{ payments.last_page }}</span>
+                <div class="flex gap-2">
+                    <Link v-if="payments.prev_page_url" :href="payments.prev_page_url"
+                        class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50">Prev</Link>
+                    <Link v-if="payments.next_page_url" :href="payments.next_page_url"
+                        class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50">Next</Link>
+                </div>
             </div>
         </div>
 
@@ -178,7 +194,7 @@ const transTypeColor = {
                         <h2 class="font-semibold text-gray-800">Edit Payment</h2>
                         <p class="text-xs text-gray-500 mt-0.5">{{ editTarget.customer_name }}</p>
                     </div>
-                    <button @click="editTarget = null" class="text-gray-400 hover:text-gray-600">
+                    <button @click="editTarget = null" aria-label="Close dialog" class="text-gray-400 hover:text-gray-600">
                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -187,17 +203,17 @@ const transTypeColor = {
                 <form @submit.prevent="submitEdit" class="p-6 space-y-4">
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Date</label>
+                            <label class="block text-xs text-gray-600 mb-1">Date</label>
                             <input type="date" v-model="editForm.payment_date" required
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Receipt / Invoice No</label>
+                            <label class="block text-xs text-gray-600 mb-1">Receipt / Invoice No</label>
                             <input type="text" v-model="editForm.receipt_no"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Trans Type</label>
+                            <label class="block text-xs text-gray-600 mb-1">Trans Type</label>
                             <select v-model="editForm.trans_type"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                                 <option value="receipts">Receipts</option>
@@ -208,12 +224,12 @@ const transTypeColor = {
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Chq No / Reference</label>
+                            <label class="block text-xs text-gray-600 mb-1">Chq No / Reference</label>
                             <input type="text" v-model="editForm.reference"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Payment Method</label>
+                            <label class="block text-xs text-gray-600 mb-1">Payment Method</label>
                             <select v-model="editForm.payment_method"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                                 <option value="cash">Cash</option>
@@ -226,13 +242,13 @@ const transTypeColor = {
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Amount (KES)</label>
+                            <label class="block text-xs text-gray-600 mb-1">Amount (KES)</label>
                             <input type="number" v-model="editForm.amount" step="0.01" required min="0.01"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         </div>
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Notes</label>
+                        <label class="block text-xs text-gray-600 mb-1">Notes</label>
                         <input type="text" v-model="editForm.notes"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
@@ -250,4 +266,12 @@ const transTypeColor = {
             </div>
         </div>
     </AuthenticatedLayout>
+
+    <ConfirmModal
+        :show="confirmModal.show"
+        :title="confirmModal.title"
+        :message="confirmModal.message"
+        :variant="confirmModal.variant"
+        @confirm="handleConfirm"
+        @cancel="closeConfirm" />
 </template>

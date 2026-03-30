@@ -27,6 +27,10 @@ Route::get('/', function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
 
+    // Station selection (for owners)
+    Route::get('/select-station', [DashboardController::class, 'selectStation'])->name('select-station');
+    Route::post('/switch-station', [DashboardController::class, 'switchStation'])->name('station.switch');
+
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/owner/dashboard', [DashboardController::class, 'ownerDashboard'])->name('owner.dashboard');

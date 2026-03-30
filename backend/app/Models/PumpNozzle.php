@@ -2,15 +2,25 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToStation;
 use Illuminate\Database\Eloquent\Model;
 
 class PumpNozzle extends Model
 {
+    use BelongsToStation;
     protected $fillable = [
-        'station_id', 'product_id', 'tank_id',
-        'nozzle_name', 'nozzle_ref', 'sort_order',
-        'main_pump', 'nozzle_no', 'is_active',
-        'last_mech', 'last_elec', 'last_shs',
+        'station_id',
+        'product_id',
+        'tank_id',
+        'nozzle_name',
+        'nozzle_ref',
+        'sort_order',
+        'main_pump',
+        'nozzle_no',
+        'is_active',
+        'last_mech',
+        'last_elec',
+        'last_shs',
     ];
 
     protected $casts = [

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToStation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,11 +10,19 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Shift extends Model
 {
+    use BelongsToStation;
     protected $fillable = [
-        'station_id', 'shift_date', 'shift_type',
-        'opened_at', 'closed_at', 'status',
-        'opened_by', 'closed_by',
-        'actual_cash', 'mpesa_amount', 'cash_variance_status',
+        'station_id',
+        'shift_date',
+        'shift_type',
+        'opened_at',
+        'closed_at',
+        'status',
+        'opened_by',
+        'closed_by',
+        'actual_cash',
+        'mpesa_amount',
+        'cash_variance_status',
     ];
 
     protected $casts = [
@@ -21,7 +30,7 @@ class Shift extends Model
         'opened_at'   => 'datetime',
         'closed_at'   => 'datetime',
         'actual_cash' => 'decimal:2',
-        'mpesa_amount'=> 'decimal:2',
+        'mpesa_amount' => 'decimal:2',
     ];
 
     public function station(): BelongsTo

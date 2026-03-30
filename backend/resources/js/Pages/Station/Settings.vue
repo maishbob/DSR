@@ -1,13 +1,23 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ConfirmModal from '@/Components/ConfirmModal.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import { fmt, fmtDate } from '@/composables/useFormatters';
 
 const props = defineProps({
     station: Object,
 });
 
 const tab = ref('pumps');
+
+// ── Confirm modal ─────────────────────────────────────────────
+const confirmModal = ref({ show: false, title: '', message: '', variant: 'danger', onConfirm: () => {} });
+function openConfirm({ title, message, variant = 'danger', onConfirm }) {
+    confirmModal.value = { show: true, title, message, variant, onConfirm };
+}
+function closeConfirm() { confirmModal.value.show = false; }
+function handleConfirm() { confirmModal.value.onConfirm(); closeConfirm(); }
 
 // ── Product form ──────────────────────────────────────────────────────────────
 const productForm = useForm({ product_name: '', cost_per_litre: '' });
@@ -179,9 +189,11 @@ function saveNozzle() {
 }
 
 function deleteNozzle(nozzle) {
-    if (confirm(`Delete nozzle "${nozzle.nozzle_name}"? This cannot be undone.`)) {
-        router.delete(route('station.nozzles.destroy', nozzle.id));
-    }
+    openConfirm({
+        title: 'Delete Nozzle',
+        message: `Delete nozzle "${nozzle.nozzle_name}"? This cannot be undone.`,
+        onConfirm: () => router.delete(route('station.nozzles.destroy', nozzle.id)),
+    });
 }
 
 // ── Shop products ─────────────────────────────────────────────────────────────
@@ -236,9 +248,11 @@ function submitGrn() {
 }
 
 function deleteTransaction(id) {
-    if (confirm('Delete this transaction?')) {
-        router.delete(route('stock-transactions.destroy', id));
-    }
+    openConfirm({
+        title: 'Delete Transaction',
+        message: 'Delete this transaction?',
+        onConfirm: () => router.delete(route('stock-transactions.destroy', id)),
+    });
 }
 
 function totalByType(sp, type) {
@@ -252,12 +266,6 @@ function salesTotal(sp) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function fmt(n, dec = 4) {
-    return Number(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtDate(d) {
-    return d ? new Date(d).toLocaleDateString('en-KE') : '—';
-}
 function fmtReading(n) {
     if (n == null || n === undefined) return '—';
     return Number(n).toFixed(3);
@@ -279,7 +287,7 @@ function fmtReading(n) {
                     <button v-for="t in ['pumps', 'tanks', 'products', 'prices', 'shop']" :key="t"
                         @click="tab = t"
                         class="px-5 py-2 text-sm font-medium border-b-2 -mb-px"
-                        :class="tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'">
+                        :class="tab === t ? 'border-orange-500 text-orange-500' : 'border-transparent text-gray-500 hover:text-gray-700'">
                         {{ { pumps: 'Pumps', tanks: 'Tanks', products: 'Products', prices: 'Fuel Prices', shop: 'Shop Products' }[t] }}
                     </button>
                 </div>
@@ -292,7 +300,7 @@ function fmtReading(n) {
                             @click="pumpsProductTab = p.id"
                             class="px-5 py-2 text-sm font-medium border-b-2 -mb-px"
                             :class="pumpsProduct == p.id
-                                ? 'border-blue-600 text-blue-600 bg-white'
+                                ? 'border-orange-500 text-orange-500 bg-white'
                                 : 'border-transparent text-gray-500 hover:text-gray-700'">
                             {{ p.product_name }}
                         </button>
@@ -422,7 +430,7 @@ function fmtReading(n) {
                         </h2>
                         <form @submit.prevent="saveTank" class="space-y-4">
                             <div v-if="!editingTank">
-                                <label class="block text-xs text-gray-500 mb-1">Product *</label>
+                                <label class="block text-xs text-gray-600 mb-1">Product *</label>
                                 <select v-model="tankForm.product_id" required
                                     class="w-full border rounded px-3 py-2 text-sm">
                                     <option value="">— Select —</option>
@@ -430,7 +438,7 @@ function fmtReading(n) {
                                 </select>
                             </div>
                             <div v-else>
-                                <label class="block text-xs text-gray-500 mb-1">Product</label>
+                                <label class="block text-xs text-gray-600 mb-1">Product</label>
                                 <div class="border rounded px-3 py-2 text-sm bg-gray-50 text-gray-600">
                                     {{ station.products?.find(p => p.id == tankForm.product_id)?.product_name }}
                                 </div>
@@ -438,13 +446,13 @@ function fmtReading(n) {
 
                             <div class="grid grid-cols-2 gap-3">
                                 <div class="col-span-2">
-                                    <label class="block text-xs text-gray-500 mb-1">Tank Name *</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Tank Name *</label>
                                     <input v-model="tankForm.tank_name" type="text" required
                                         class="w-full border rounded px-3 py-2 text-sm uppercase"
                                         placeholder="DIESEL TANK 1" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Capacity (L) *</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Capacity (L) *</label>
                                     <input v-model="tankForm.tank_capacity" type="number" required min="1"
                                         class="w-full border rounded px-3 py-2 text-sm font-mono"
                                         placeholder="45000" />
@@ -461,19 +469,19 @@ function fmtReading(n) {
                                 <div class="text-xs font-semibold text-blue-700">Opening Stock (used as opening for next shift)</div>
                                 <div class="grid grid-cols-3 gap-2">
                                     <div>
-                                        <label class="block text-xs text-gray-500 mb-1">Last Closing</label>
+                                        <label class="block text-xs text-gray-600 mb-1">Last Closing</label>
                                         <input type="number" v-model="tankForm.last_closing_stock" step="0.01" min="0"
                                             class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm font-mono"
                                             placeholder="0.00" />
                                     </div>
                                     <div>
-                                        <label class="block text-xs text-gray-500 mb-1">Last Dip</label>
+                                        <label class="block text-xs text-gray-600 mb-1">Last Dip</label>
                                         <input type="number" v-model="tankForm.last_dip_stock" step="0.01" min="0"
                                             class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm font-mono"
                                             placeholder="0.00" />
                                     </div>
                                     <div>
-                                        <label class="block text-xs text-gray-500 mb-1">Dip 2</label>
+                                        <label class="block text-xs text-gray-600 mb-1">Dip 2</label>
                                         <input type="number" v-model="tankForm.last_dip_2" step="0.01" min="0"
                                             class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm font-mono"
                                             placeholder="0.00" />
@@ -508,13 +516,13 @@ function fmtReading(n) {
                         <h2 class="font-semibold text-gray-700 mb-4">Add Product</h2>
                         <form @submit.prevent="addProduct" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Product Name *</label>
+                                <label class="block text-xs text-gray-600 mb-1">Product Name *</label>
                                 <input type="text" v-model="productForm.product_name" required
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                                     placeholder="e.g. DIESEL, UNLEADED" />
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Cost Per Litre (KES)</label>
+                                <label class="block text-xs text-gray-600 mb-1">Cost Per Litre (KES)</label>
                                 <input type="number" v-model="productForm.cost_per_litre" step="0.0001" min="0"
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                                     placeholder="0.0000" />
@@ -546,13 +554,13 @@ function fmtReading(n) {
                                     @click="openEditProduct(p)">
                                     <td class="px-4 py-3 font-medium text-gray-800">{{ p.product_name }}</td>
                                     <td class="px-4 py-3 text-right font-mono">
-                                        {{ currentPriceForProduct(p) > 0 ? fmt(currentPriceForProduct(p)) : '—' }}
+                                        {{ currentPriceForProduct(p) > 0 ? fmt(currentPriceForProduct(p), 4) : '—' }}
                                     </td>
                                     <td class="px-4 py-3 text-right font-mono text-gray-500">
-                                        {{ currentPriceForProduct(p) > 0 ? fmt(vatPerLitre(currentPriceForProduct(p))) : '—' }}
+                                        {{ currentPriceForProduct(p) > 0 ? fmt(vatPerLitre(currentPriceForProduct(p)), 4) : '—' }}
                                     </td>
                                     <td class="px-4 py-3 text-right font-mono">
-                                        {{ p.cost_per_litre ? fmt(p.cost_per_litre) : '—' }}
+                                        {{ p.cost_per_litre ? fmt(p.cost_per_litre, 4) : '—' }}
                                     </td>
                                     <td class="px-4 py-3 text-right font-mono"
                                         :class="marginPerLitre(currentPriceForProduct(p), Number(p.cost_per_litre ?? 0)) > 0
@@ -586,7 +594,7 @@ function fmtReading(n) {
                         <p class="text-sm text-gray-500 mb-4">Setting a new price closes the previous price effective today.</p>
                         <form @submit.prevent="updatePrice" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Product *</label>
+                                <label class="block text-xs text-gray-600 mb-1">Product *</label>
                                 <select v-model="priceForm.product_id" required
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                                     <option value="">Select product</option>
@@ -594,13 +602,13 @@ function fmtReading(n) {
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Price per Litre (KES) *</label>
+                                <label class="block text-xs text-gray-600 mb-1">Price per Litre (KES) *</label>
                                 <input type="number" v-model="priceForm.price_per_litre" required step="0.0001" min="0.001"
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                                     placeholder="e.g. 198.5000" />
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Effective From *</label>
+                                <label class="block text-xs text-gray-600 mb-1">Effective From *</label>
                                 <div class="flex gap-2">
                                     <input type="date" v-model="priceForm.effective_from" required
                                         class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
@@ -623,7 +631,7 @@ function fmtReading(n) {
                                 <div class="flex justify-between items-center px-4 py-2 border-t border-gray-50 text-sm">
                                     <span class="text-gray-600">From {{ fmtDate(ph.effective_from) }}</span>
                                     <span class="text-gray-400 text-xs">{{ ph.effective_to ? 'to ' + fmtDate(ph.effective_to) : 'current' }}</span>
-                                    <span class="font-semibold text-gray-800">KES {{ fmt(ph.price_per_litre) }}</span>
+                                    <span class="font-semibold text-gray-800">KES {{ fmt(ph.price_per_litre, 4) }}</span>
                                 </div>
                             </template>
                             <div v-if="!product.price_histories?.length" class="px-4 py-3 text-sm text-gray-400">No prices set.</div>
@@ -638,23 +646,23 @@ function fmtReading(n) {
                         <h2 class="font-semibold text-gray-700 mb-4">Add Shop Product</h2>
                         <form @submit.prevent="addShopProduct" class="grid grid-cols-2 sm:grid-cols-6 gap-3">
                             <div class="col-span-2">
-                                <label class="block text-xs text-gray-500 mb-1">Item Name *</label>
+                                <label class="block text-xs text-gray-600 mb-1">Item Name *</label>
                                 <input type="text" v-model="shopForm.product_name" required
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm uppercase"
                                     placeholder="e.g. HX7 HELIX 10W-40 4L" />
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Unit *</label>
+                                <label class="block text-xs text-gray-600 mb-1">Unit *</label>
                                 <input type="text" v-model="shopForm.unit" required
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Price *</label>
+                                <label class="block text-xs text-gray-600 mb-1">Price *</label>
                                 <input type="number" v-model="shopForm.current_price" required step="0.01" min="0"
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" placeholder="0.00" />
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Cost</label>
+                                <label class="block text-xs text-gray-600 mb-1">Cost</label>
                                 <input type="number" v-model="shopForm.cost" step="0.01" min="0"
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" placeholder="0.00" />
                             </div>
@@ -724,12 +732,12 @@ function fmtReading(n) {
                 <div class="flex border-b border-gray-200 px-6 bg-gray-50">
                     <button @click="shopModalTab = 'stock'"
                         class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
-                        :class="shopModalTab === 'stock' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-gray-500'">
+                        :class="shopModalTab === 'stock' ? 'border-orange-500 text-orange-500 bg-white' : 'border-transparent text-gray-500'">
                         Stock / GRN
                     </button>
                     <button @click="shopModalTab = 'sales'"
                         class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
-                        :class="shopModalTab === 'sales' ? 'border-blue-600 text-blue-600 bg-white' : 'border-transparent text-gray-500'">
+                        :class="shopModalTab === 'sales' ? 'border-orange-500 text-orange-500 bg-white' : 'border-transparent text-gray-500'">
                         Sales
                     </button>
                 </div>
@@ -740,27 +748,27 @@ function fmtReading(n) {
                         <!-- Item details form -->
                         <div class="grid grid-cols-2 gap-3">
                             <div class="col-span-2">
-                                <label class="block text-xs text-gray-500 mb-1">Item Name *</label>
+                                <label class="block text-xs text-gray-600 mb-1">Item Name *</label>
                                 <input v-model="shopEditForm.product_name" type="text" required
                                     class="w-full border rounded px-3 py-2 text-sm uppercase" />
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Price *</label>
+                                <label class="block text-xs text-gray-600 mb-1">Price *</label>
                                 <input v-model="shopEditForm.current_price" type="number" step="0.01" required
                                     class="w-full border rounded px-3 py-2 text-sm font-mono" />
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Cost</label>
+                                <label class="block text-xs text-gray-600 mb-1">Cost</label>
                                 <input v-model="shopEditForm.cost" type="number" step="0.01"
                                     class="w-full border rounded px-3 py-2 text-sm font-mono" placeholder="0.00" />
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Forecourt Stock</label>
+                                <label class="block text-xs text-gray-600 mb-1">Forecourt Stock</label>
                                 <input v-model="shopEditForm.forecourt_stock" type="number" step="1" min="0"
                                     class="w-full border rounded px-3 py-2 text-sm font-mono" />
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Store Stock</label>
+                                <label class="block text-xs text-gray-600 mb-1">Store Stock</label>
                                 <input v-model="shopEditForm.store_stock" type="number" step="1" min="0"
                                     class="w-full border rounded px-3 py-2 text-sm font-mono" />
                             </div>
@@ -800,7 +808,12 @@ function fmtReading(n) {
                                             </td>
                                             <td class="px-3 py-1.5 text-right">
                                                 <button v-if="tx.type !== 'iss'" @click="deleteTransaction(tx.id)"
-                                                    class="text-red-400 hover:text-red-600 text-xs">✕</button>
+                                                    aria-label="Delete transaction"
+                                                    class="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
                                             </td>
                                         </tr>
                                         <tr v-if="!(editingShopProduct?.stock_transactions ?? []).length">
@@ -839,24 +852,24 @@ function fmtReading(n) {
                             <div class="text-xs font-semibold text-gray-600 mb-2">Insert GRN / Adjustment</div>
                             <form @submit.prevent="submitGrn" class="grid grid-cols-2 sm:grid-cols-5 gap-2">
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Type</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Type</label>
                                     <select v-model="grnForm.type" class="w-full border rounded px-2 py-1.5 text-sm bg-white">
                                         <option value="grn">GRN</option>
                                         <option value="adj">ADJ</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Date</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Date</label>
                                     <input v-model="grnForm.trans_date" type="date"
                                         class="w-full border rounded px-2 py-1.5 text-sm bg-white" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Qty *</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Qty *</label>
                                     <input v-model="grnForm.quantity" type="number" step="1" min="1" required
                                         class="w-full border rounded px-2 py-1.5 text-sm font-mono bg-white" placeholder="0" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-500 mb-1">Ref / Doc No.</label>
+                                    <label class="block text-xs text-gray-600 mb-1">Ref / Doc No.</label>
                                     <input v-model="grnForm.document_ref"
                                         class="w-full border rounded px-2 py-1.5 text-sm font-mono bg-white" placeholder="GRN-001" />
                                 </div>
@@ -933,7 +946,7 @@ function fmtReading(n) {
 
                 <form @submit.prevent="saveProduct" class="space-y-4">
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Product Name *</label>
+                        <label class="block text-xs text-gray-600 mb-1">Product Name *</label>
                         <input v-model="productEditForm.product_name" type="text" required
                             class="w-full border rounded px-3 py-2 text-sm uppercase" />
                     </div>
@@ -945,7 +958,7 @@ function fmtReading(n) {
                                 <tr>
                                     <td class="px-3 py-2 text-gray-600 w-40">Price Per Litre</td>
                                     <td class="px-3 py-2 text-right font-mono font-semibold">
-                                        {{ fmt(currentPriceForProduct(editingProduct)) }}
+                                        {{ fmt(currentPriceForProduct(editingProduct), 4) }}
                                     </td>
                                     <td class="px-3 py-1 w-28">
                                         <span class="text-xs text-gray-400 italic">from price history</span>
@@ -954,7 +967,7 @@ function fmtReading(n) {
                                 <tr class="bg-gray-50">
                                     <td class="px-3 py-2 text-gray-600">VAT Per Litre</td>
                                     <td class="px-3 py-2 text-right font-mono text-gray-500">
-                                        {{ fmt(vatPerLitre(currentPriceForProduct(editingProduct))) }}
+                                        {{ fmt(vatPerLitre(currentPriceForProduct(editingProduct)), 4) }}
                                     </td>
                                     <td class="px-3 py-1">
                                         <span class="text-xs text-gray-400 italic">auto (16/116)</span>
@@ -1032,7 +1045,7 @@ function fmtReading(n) {
                 <form @submit.prevent="saveNozzle" class="space-y-4">
                     <!-- Product (read-only when editing) -->
                     <div v-if="!editingNozzle">
-                        <label class="block text-xs text-gray-500 mb-1">Product *</label>
+                        <label class="block text-xs text-gray-600 mb-1">Product *</label>
                         <select v-model="nozzleForm.product_id" required
                             class="w-full border rounded px-3 py-2 text-sm">
                             <option value="">— Select —</option>
@@ -1041,7 +1054,7 @@ function fmtReading(n) {
                     </div>
                     <div v-else class="flex gap-3">
                         <div class="flex-1">
-                            <label class="block text-xs text-gray-500 mb-1">Product</label>
+                            <label class="block text-xs text-gray-600 mb-1">Product</label>
                             <div class="border rounded px-3 py-2 text-sm bg-gray-50 text-gray-600">
                                 {{ station.products?.find(p => p.id == nozzleForm.product_id)?.product_name }}
                             </div>
@@ -1050,7 +1063,7 @@ function fmtReading(n) {
 
                     <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Nozzle Ref</label>
+                            <label class="block text-xs text-gray-600 mb-1">Nozzle Ref</label>
                             <input v-model="nozzleForm.nozzle_ref" type="text"
                                 @blur="autoFillName"
                                 class="w-full border rounded px-3 py-2 text-sm font-mono uppercase"
@@ -1058,7 +1071,7 @@ function fmtReading(n) {
                             <p class="text-xs text-gray-400 mt-0.5">Short code e.g. UX3, DX1</p>
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Full Name *</label>
+                            <label class="block text-xs text-gray-600 mb-1">Full Name *</label>
                             <input v-model="nozzleForm.nozzle_name" type="text" required
                                 class="w-full border rounded px-3 py-2 text-sm uppercase"
                                 placeholder="UX3 UNLEADED" />
@@ -1066,7 +1079,7 @@ function fmtReading(n) {
                     </div>
 
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Default Tank</label>
+                        <label class="block text-xs text-gray-600 mb-1">Default Tank</label>
                         <select v-model="nozzleForm.tank_id"
                             class="w-full border rounded px-3 py-2 text-sm">
                             <option value="">— No tank assigned —</option>
@@ -1081,17 +1094,17 @@ function fmtReading(n) {
                         <div class="text-xs font-semibold text-blue-700 mb-2">Opening Readings (used as opening for next shift)</div>
                         <div class="grid grid-cols-3 gap-2">
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Mechanical</label>
+                                <label class="block text-xs text-gray-600 mb-1">Mechanical</label>
                                 <input type="number" v-model="nozzleForm.last_mech" step="0.1" min="0"
                                     class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm font-mono" placeholder="0.0" />
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Electrical</label>
+                                <label class="block text-xs text-gray-600 mb-1">Electrical</label>
                                 <input type="number" v-model="nozzleForm.last_elec" step="0.001" min="0"
                                     class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm font-mono" placeholder="0.000" />
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Shs</label>
+                                <label class="block text-xs text-gray-600 mb-1">Shs</label>
                                 <input type="number" v-model="nozzleForm.last_shs" step="0.01" min="0"
                                     class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm font-mono" placeholder="0.00" />
                             </div>
@@ -1135,4 +1148,12 @@ function fmtReading(n) {
         </div>
 
     </AuthenticatedLayout>
+
+    <ConfirmModal
+        :show="confirmModal.show"
+        :title="confirmModal.title"
+        :message="confirmModal.message"
+        :variant="confirmModal.variant"
+        @confirm="handleConfirm"
+        @cancel="closeConfirm" />
 </template>

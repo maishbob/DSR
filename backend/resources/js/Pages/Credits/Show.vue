@@ -1,7 +1,9 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ConfirmModal from '@/Components/ConfirmModal.vue';
 import { Head, useForm, Link, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import { fmt, fmtDate } from '@/composables/useFormatters';
 
 const props = defineProps({
     customer:        Object,
@@ -10,6 +12,14 @@ const props = defineProps({
     from_date:       String,
     to_date:         String,
 });
+
+// ── Confirm modal ─────────────────────────────────────────────
+const confirmModal = ref({ show: false, title: '', message: '', variant: 'danger', onConfirm: () => {} });
+function openConfirm({ title, message, variant = 'danger', onConfirm }) {
+    confirmModal.value = { show: true, title, message, variant, onConfirm };
+}
+function closeConfirm() { confirmModal.value.show = false; }
+function handleConfirm() { confirmModal.value.onConfirm(); closeConfirm(); }
 
 // ── Edit customer modal ──────────────────────────────────────
 const showEdit = ref(false);
@@ -86,21 +96,19 @@ const closingBalance = computed(() => {
     return last ? last.running : (props.brought_forward ?? 0);
 });
 
-// ── Helpers ────────────────────────────────────────────────────
-function fmt(n, dec = 2) {
-    return Number(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtDate(d) {
-    return d ? new Date(d + 'T00:00:00').toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-}
 
 const saleTypeLabel = { fuel: 'Fuel', oil: 'Oil', other: 'Other' };
 
 function deleteSale(row) {
-    if (!confirm(`Delete credit sale of KES ${fmt(row.debit)} — ${row.description}?`)) return;
-    // row.id is formatted as "sale_123" — extract the numeric id
-    const id = String(row.id).replace('sale_', '');
-    router.delete(route('credit-sales.destroy', id), { preserveScroll: true });
+    openConfirm({
+        title: 'Delete Credit Sale',
+        message: `Delete credit sale of KES ${fmt(row.debit)} — ${row.description}?`,
+        onConfirm: () => {
+            // row.id is formatted as "sale_123" — extract the numeric id
+            const id = String(row.id).replace('sale_', '');
+            router.delete(route('credit-sales.destroy', id), { preserveScroll: true });
+        },
+    });
 }
 </script>
 
@@ -241,18 +249,18 @@ function deleteSale(row) {
             <h2 class="font-semibold text-gray-700 mb-4">Record Payment</h2>
             <form @submit.prevent="submitPayment" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Date</label>
+                    <label class="block text-xs text-gray-600 mb-1">Date</label>
                     <input type="date" v-model="paymentForm.payment_date" required
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Receipt / Invoice No</label>
+                    <label class="block text-xs text-gray-600 mb-1">Receipt / Invoice No</label>
                     <input type="text" v-model="paymentForm.receipt_no"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
                         placeholder="e.g. 60092" />
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Trans Type</label>
+                    <label class="block text-xs text-gray-600 mb-1">Trans Type</label>
                     <select v-model="paymentForm.trans_type"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="receipts">Receipts</option>
@@ -263,13 +271,13 @@ function deleteSale(row) {
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Chq No / Reference</label>
+                    <label class="block text-xs text-gray-600 mb-1">Chq No / Reference</label>
                     <input type="text" v-model="paymentForm.reference"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
                         placeholder="e.g. 258080" />
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Payment Method</label>
+                    <label class="block text-xs text-gray-600 mb-1">Payment Method</label>
                     <select v-model="paymentForm.payment_method"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="cash">Cash</option>
@@ -282,12 +290,12 @@ function deleteSale(row) {
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Amount (KES)</label>
+                    <label class="block text-xs text-gray-600 mb-1">Amount (KES)</label>
                     <input type="number" v-model="paymentForm.amount" step="0.01" required min="0.01"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                 </div>
                 <div class="sm:col-span-2">
-                    <label class="block text-xs text-gray-500 mb-1">Notes</label>
+                    <label class="block text-xs text-gray-600 mb-1">Notes</label>
                     <input type="text" v-model="paymentForm.notes"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                 </div>
@@ -377,7 +385,7 @@ function deleteSale(row) {
                                 <button v-if="row.type === 'sale'"
                                     @click="deleteSale(row)"
                                     class="text-gray-300 hover:text-red-500 transition-colors"
-                                    title="Delete sale">
+                                    aria-label="Delete sale">
                                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                     </svg>
@@ -420,7 +428,7 @@ function deleteSale(row) {
             <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-8">
                 <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                     <h2 class="font-semibold text-gray-800">Edit Customer Details</h2>
-                    <button @click="showEdit = false" class="text-gray-400 hover:text-gray-600">
+                    <button @click="showEdit = false" aria-label="Close dialog" class="text-gray-400 hover:text-gray-600">
                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -429,59 +437,59 @@ function deleteSale(row) {
                 <form @submit.prevent="submitEdit" class="p-6 space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Customer Name *</label>
+                            <label class="block text-xs text-gray-600 mb-1">Customer Name *</label>
                             <input type="text" v-model="editForm.customer_name" required
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                             <p v-if="editForm.errors.customer_name" class="text-red-500 text-xs mt-1">{{ editForm.errors.customer_name }}</p>
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Contact Person</label>
+                            <label class="block text-xs text-gray-600 mb-1">Contact Person</label>
                             <input type="text" v-model="editForm.contact"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Phone</label>
+                            <label class="block text-xs text-gray-600 mb-1">Phone</label>
                             <input type="tel" v-model="editForm.phone"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Email</label>
+                            <label class="block text-xs text-gray-600 mb-1">Email</label>
                             <input type="email" v-model="editForm.email"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">City / Town</label>
+                            <label class="block text-xs text-gray-600 mb-1">City / Town</label>
                             <input type="text" v-model="editForm.city"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Address</label>
+                            <label class="block text-xs text-gray-600 mb-1">Address</label>
                             <input type="text" v-model="editForm.address"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">KRA PIN</label>
+                            <label class="block text-xs text-gray-600 mb-1">KRA PIN</label>
                             <input type="text" v-model="editForm.pin"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
                                 placeholder="P123456789A" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">VAT Number</label>
+                            <label class="block text-xs text-gray-600 mb-1">VAT Number</label>
                             <input type="text" v-model="editForm.vat_number"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Credit Limit (KES) *</label>
+                            <label class="block text-xs text-gray-600 mb-1">Credit Limit (KES) *</label>
                             <input type="number" v-model="editForm.credit_limit" required min="0" step="0.01"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Opening Balance (KES)</label>
+                            <label class="block text-xs text-gray-600 mb-1">Opening Balance (KES)</label>
                             <input type="number" v-model="editForm.initial_opening_balance" step="0.01"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Discount Multiplier (0–1)</label>
+                            <label class="block text-xs text-gray-600 mb-1">Discount Multiplier (0–1)</label>
                             <input type="number" v-model="editForm.discount_multiplier" min="0" max="1" step="0.0001"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                                 placeholder="e.g. 0.05 = 5%" />

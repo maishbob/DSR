@@ -2,17 +2,29 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToStation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CreditCustomer extends Model
 {
+    use BelongsToStation;
     protected $fillable = [
-        'station_id', 'customer_name', 'contact', 'phone', 'email',
-        'address', 'city', 'pin', 'vat_number',
-        'is_withholding_vat_agent', 'credit_limit',
-        'discount_multiplier', 'initial_opening_balance', 'is_active',
+        'station_id',
+        'customer_name',
+        'contact',
+        'phone',
+        'email',
+        'address',
+        'city',
+        'pin',
+        'vat_number',
+        'is_withholding_vat_agent',
+        'credit_limit',
+        'discount_multiplier',
+        'initial_opening_balance',
+        'is_active',
     ];
 
     protected $casts = [
@@ -22,8 +34,6 @@ class CreditCustomer extends Model
         'is_withholding_vat_agent' => 'boolean',
         'is_active'                => 'boolean',
     ];
-
-    protected $appends = ['balance', 'total_purchases', 'total_paid'];
 
     public function station(): BelongsTo
     {

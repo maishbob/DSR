@@ -7,12 +7,32 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CreditSale extends Model
 {
+    public function resolveRouteBinding($value, $field = null): ?Model
+    {
+        $stationId = auth()->user()?->station_id;
+        if (! $stationId) {
+            abort(403);
+        }
+
+        return $this->where($field ?? $this->getRouteKeyName(), $value)
+            ->whereHas('creditCustomer', fn($q) => $q->where('station_id', $stationId))
+            ->firstOrFail();
+    }
     protected $fillable = [
-        'credit_customer_id', 'product_id', 'shift_id',
-        'debit_note', 'type',
-        'quantity', 'price_applied', 'total_value',
-        'vat_amount', 'wht_amount',
-        'vehicle_plate', 'notes', 'entered_by', 'is_locked',
+        'credit_customer_id',
+        'product_id',
+        'shift_id',
+        'debit_note',
+        'type',
+        'quantity',
+        'price_applied',
+        'total_value',
+        'vat_amount',
+        'wht_amount',
+        'vehicle_plate',
+        'notes',
+        'entered_by',
+        'is_locked',
     ];
 
     protected $casts = [

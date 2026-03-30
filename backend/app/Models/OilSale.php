@@ -6,8 +6,25 @@ use Illuminate\Database\Eloquent\Model;
 
 class OilSale extends Model
 {
+    public function resolveRouteBinding($value, $field = null): ?Model
+    {
+        $stationId = auth()->user()?->station_id;
+        if (! $stationId) {
+            abort(403);
+        }
+
+        return $this->where($field ?? $this->getRouteKeyName(), $value)
+            ->whereHas('shift', fn($q) => $q->where('station_id', $stationId))
+            ->firstOrFail();
+    }
     protected $fillable = [
-        'shift_id', 'shop_product_id', 'opening_stock', 'quantity', 'unit_price', 'total_value', 'entered_by',
+        'shift_id',
+        'shop_product_id',
+        'opening_stock',
+        'quantity',
+        'unit_price',
+        'total_value',
+        'entered_by',
     ];
 
     protected $casts = [

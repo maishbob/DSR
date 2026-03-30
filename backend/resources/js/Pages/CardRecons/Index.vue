@@ -1,11 +1,21 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, useForm, router } from '@inertiajs/vue3';
+import ConfirmModal from '@/Components/ConfirmModal.vue';
+import { Head, useForm, router, Link } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
+import { fmt, fmtDate } from '@/composables/useFormatters';
 
 const props = defineProps({
-    recons: Array,
+    recons: Object,
 });
+
+// ── Confirm modal ─────────────────────────────────────────────
+const confirmModal = ref({ show: false, title: '', message: '', variant: 'danger', onConfirm: () => {} });
+function openConfirm({ title, message, variant = 'danger', onConfirm }) {
+    confirmModal.value = { show: true, title, message, variant, onConfirm };
+}
+function closeConfirm() { confirmModal.value.show = false; }
+function handleConfirm() { confirmModal.value.onConfirm(); closeConfirm(); }
 
 // ── Selected recon (detail panel) ────────────────────────────
 const selected = ref(null);
@@ -66,8 +76,13 @@ function submitEdit() {
 }
 
 function deleteRecon(r) {
-    if (!confirm(`Delete recon ${r.card_name} – ${r.batch_ref ?? r.id}?`)) return;
-    router.delete(route('card-recons.destroy', r.id), { preserveScroll: true });
+    openConfirm({
+        title: 'Delete Reconciliation',
+        message: `Delete recon ${r.card_name} – ${r.batch_ref ?? r.id}?`,
+        onConfirm: () => {
+            router.delete(route('card-recons.destroy', r.id), { preserveScroll: true });
+        },
+    });
 }
 
 function submitLine() {
@@ -89,14 +104,7 @@ const linesTotal = computed(() =>
 // ── Card name options ─────────────────────────────────────────
 const cardOptions = ['EQUITY', 'BARCLAYS', 'KCB', 'NCBA', 'COOPERATIVE', 'ABSA', 'STANBIC', 'OTHER'];
 
-// ── Helpers ────────────────────────────────────────────────────
-function fmt(n, dec = 2) {
-    return Number(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtDate(d) {
-    if (!d) return '—';
-    return new Date(d + 'T00:00:00').toLocaleDateString('en-KE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
+
 
 const cardColor = {
     EQUITY:      'bg-green-100 text-green-800',
@@ -117,7 +125,7 @@ const cardColor = {
 
         <!-- Toolbar -->
         <div class="flex items-center justify-between mb-5">
-            <p class="text-sm text-gray-500">{{ recons.length }} recon batch(es)</p>
+            <p class="text-sm text-gray-500">{{ recons.total }} recon batch(es)</p>
             <button @click="showNew = !showNew"
                 class="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-600 font-medium">
                 + New Recon Batch
@@ -129,7 +137,7 @@ const cardColor = {
             <h2 class="font-semibold text-gray-700 mb-4">New Recon Batch</h2>
             <form @submit.prevent="submitNew" class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Card Name *</label>
+                    <label class="block text-xs text-gray-600 mb-1">Card Name *</label>
                     <input list="card-options-new" v-model="newForm.card_name" required
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. EQUITY" />
                     <datalist id="card-options-new">
@@ -137,13 +145,13 @@ const cardColor = {
                     </datalist>
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Batch Ref</label>
+                    <label class="block text-xs text-gray-600 mb-1">Batch Ref</label>
                     <input type="text" v-model="newForm.batch_ref"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
                         placeholder="e.g. 22190101" />
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Recon Date *</label>
+                    <label class="block text-xs text-gray-600 mb-1">Recon Date *</label>
                     <input type="date" v-model="newForm.recon_date" required
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                 </div>
@@ -175,7 +183,7 @@ const cardColor = {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="r in recons" :key="r.id"
+                        <tr v-for="r in recons.data" :key="r.id"
                             class="border-t border-gray-100 hover:bg-orange-50 cursor-pointer"
                             @click="openEdit(r)">
                             <td class="px-4 py-3">
@@ -197,13 +205,24 @@ const cardColor = {
                                 </button>
                             </td>
                         </tr>
-                        <tr v-if="!recons?.length">
+                        <tr v-if="!recons.data?.length">
                             <td colspan="6" class="px-4 py-10 text-center text-gray-400">
                                 No recon batches recorded.
                             </td>
                         </tr>
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Pagination -->
+            <div v-if="recons.last_page > 1" class="px-4 py-3 border-t flex justify-between items-center text-sm">
+                <span class="text-gray-500">Page {{ recons.current_page }} of {{ recons.last_page }}</span>
+                <div class="flex gap-2">
+                    <Link v-if="recons.prev_page_url" :href="recons.prev_page_url"
+                        class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50">Prev</Link>
+                    <Link v-if="recons.next_page_url" :href="recons.next_page_url"
+                        class="px-3 py-1 border border-gray-300 rounded-lg hover:bg-gray-50">Next</Link>
+                </div>
             </div>
         </div>
 
@@ -217,7 +236,7 @@ const cardColor = {
                         Recon Batch
                         <span class="text-gray-400 font-normal ml-1">#{{ editTarget.id }}</span>
                     </h2>
-                    <button @click="editTarget = null" class="text-gray-400 hover:text-gray-600">
+                    <button @click="editTarget = null" aria-label="Close dialog" class="text-gray-400 hover:text-gray-600">
                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -228,7 +247,7 @@ const cardColor = {
                 <form @submit.prevent="submitEdit" class="px-6 pt-5 pb-4 border-b border-gray-100">
                     <div class="grid grid-cols-3 gap-4 items-end">
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Card Name</label>
+                            <label class="block text-xs text-gray-600 mb-1">Card Name</label>
                             <input list="card-options-edit" v-model="editForm.card_name" required
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                             <datalist id="card-options-edit">
@@ -236,12 +255,12 @@ const cardColor = {
                             </datalist>
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Batch Ref</label>
+                            <label class="block text-xs text-gray-600 mb-1">Batch Ref</label>
                             <input type="text" v-model="editForm.batch_ref"
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Recon Date</label>
+                            <label class="block text-xs text-gray-600 mb-1">Recon Date</label>
                             <input type="date" v-model="editForm.recon_date" required
                                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         </div>
@@ -274,7 +293,12 @@ const cardColor = {
                                 <td class="px-3 py-2 text-right font-medium text-gray-800">{{ fmt(line.amount) }}</td>
                                 <td class="px-3 py-2 text-right">
                                     <button @click="deleteLine(line)"
-                                        class="text-xs text-red-500 hover:underline">✕</button>
+                                        aria-label="Delete recon line"
+                                        class="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
                                 </td>
                             </tr>
                             <tr v-if="!editLines.length">
@@ -300,18 +324,18 @@ const cardColor = {
                     <form @submit.prevent="submitLine"
                         class="grid grid-cols-3 gap-3 items-end bg-gray-50 rounded-lg p-3">
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Trans Date</label>
+                            <label class="block text-xs text-gray-600 mb-1">Trans Date</label>
                             <input type="date" v-model="lineForm.trans_date" required
                                 class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Ref</label>
+                            <label class="block text-xs text-gray-600 mb-1">Ref</label>
                             <input type="text" v-model="lineForm.ref"
                                 class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm font-mono"
                                 placeholder="e.g. 26010111720" />
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 mb-1">Amount</label>
+                            <label class="block text-xs text-gray-600 mb-1">Amount</label>
                             <div class="flex gap-2">
                                 <input type="number" v-model="lineForm.amount" step="0.01" required min="0.01"
                                     class="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />

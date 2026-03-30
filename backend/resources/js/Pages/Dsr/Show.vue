@@ -1,8 +1,10 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ConfirmModal from '@/Components/ConfirmModal.vue';
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 import { usePage } from '@inertiajs/vue3';
+import { fmt, fmtDate } from '@/composables/useFormatters';
 
 const props = defineProps({
     dsr: Object,
@@ -12,6 +14,14 @@ const props = defineProps({
 const page = usePage();
 const user = computed(() => page.props.auth.user);
 const isManager = computed(() => ['owner', 'manager'].includes(user.value.role));
+
+// ── Confirm modal ─────────────────────────────────────────────
+const confirmModal = ref({ show: false, title: '', message: '', variant: 'danger', onConfirm: () => {} });
+function openConfirm({ title, message, variant = 'danger', onConfirm }) {
+    confirmModal.value = { show: true, title, message, variant, onConfirm };
+}
+function closeConfirm() { confirmModal.value.show = false; }
+function handleConfirm() { confirmModal.value.onConfirm(); closeConfirm(); }
 
 const adjForm = useForm({
     adjustment_type: '',
@@ -44,20 +54,18 @@ function approve() {
         showOverrideInput.value = true;
         return;
     }
-    if (!confirm('Approve and lock this DSR? This cannot be undone.')) return;
-    approveForm.post(route('dsr.approve', props.dsr.id));
+    openConfirm({
+        title: 'Approve DSR',
+        message: 'Approve and lock this DSR? This cannot be undone.',
+        variant: 'warning',
+        onConfirm: () => approveForm.post(route('dsr.approve', props.dsr.id)),
+    });
 }
 
 function print() {
     window.print();
 }
 
-function fmt(n, dec = 2) {
-    return Number(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtDate(d) {
-    return d ? new Date(d).toLocaleDateString('en-KE') : '—';
-}
 </script>
 
 <template>
@@ -223,23 +231,23 @@ function fmtDate(d) {
                 <h2 class="font-semibold text-gray-700 mb-4">Record Adjustment</h2>
                 <form @submit.prevent="submitAdj" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Adjustment Type</label>
+                        <label class="block text-xs text-gray-600 mb-1">Adjustment Type</label>
                         <input type="text" v-model="adjForm.adjustment_type" required
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                             placeholder="e.g. meter_reading, stock_correction" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Reason *</label>
+                        <label class="block text-xs text-gray-600 mb-1">Reason *</label>
                         <input type="text" v-model="adjForm.reason" required
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Original Value</label>
+                        <label class="block text-xs text-gray-600 mb-1">Original Value</label>
                         <input type="number" v-model="adjForm.original_value" step="any"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                     <div>
-                        <label class="block text-xs text-gray-500 mb-1">Corrected Value</label>
+                        <label class="block text-xs text-gray-600 mb-1">Corrected Value</label>
                         <input type="number" v-model="adjForm.corrected_value" step="any"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
@@ -286,6 +294,14 @@ function fmtDate(d) {
             </div>
         </div>
     </AuthenticatedLayout>
+
+    <ConfirmModal
+        :show="confirmModal.show"
+        :title="confirmModal.title"
+        :message="confirmModal.message"
+        :variant="confirmModal.variant"
+        @confirm="handleConfirm"
+        @cancel="closeConfirm" />
 </template>
 
 <style>

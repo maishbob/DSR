@@ -62,7 +62,7 @@ function fmtDate(d) {
             <h2 class="font-semibold text-gray-700 mb-4">Record Fuel Delivery</h2>
             <form @submit.prevent="submit" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Product *</label>
+                    <label class="block text-xs text-gray-600 mb-1">Product *</label>
                     <select v-model="form.product_id" required
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="">Select product</option>
@@ -70,7 +70,7 @@ function fmtDate(d) {
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Tank *</label>
+                    <label class="block text-xs text-gray-600 mb-1">Tank *</label>
                     <select v-model="form.tank_id" required
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="">Select tank</option>
@@ -78,42 +78,42 @@ function fmtDate(d) {
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Delivery Date *</label>
+                    <label class="block text-xs text-gray-600 mb-1">Delivery Date *</label>
                     <input type="date" v-model="form.delivery_date" required
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Supplier *</label>
+                    <label class="block text-xs text-gray-600 mb-1">Supplier *</label>
                     <input type="text" v-model="form.supplier_name" required
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                         placeholder="e.g. Total Kenya" />
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Waybill / LPO No.</label>
+                    <label class="block text-xs text-gray-600 mb-1">Waybill / LPO No.</label>
                     <input type="text" v-model="form.waybill_number"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                         placeholder="Optional" />
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Delivery Quantity (L) *</label>
+                    <label class="block text-xs text-gray-600 mb-1">Delivery Quantity (L) *</label>
                     <input type="number" v-model="form.delivery_quantity" step="0.01" required
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                         placeholder="Litres as per invoice" />
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Tank Dip Before (L)</label>
+                    <label class="block text-xs text-gray-600 mb-1">Tank Dip Before (L)</label>
                     <input type="number" v-model="form.tank_dip_before" step="0.01"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                         placeholder="Dip before delivery" />
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Tank Dip After (L)</label>
+                    <label class="block text-xs text-gray-600 mb-1">Tank Dip After (L)</label>
                     <input type="number" v-model="form.tank_dip_after" step="0.01"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                         placeholder="Dip after delivery" />
                 </div>
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Notes</label>
+                    <label class="block text-xs text-gray-600 mb-1">Notes</label>
                     <input type="text" v-model="form.notes"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                         placeholder="Optional notes" />
