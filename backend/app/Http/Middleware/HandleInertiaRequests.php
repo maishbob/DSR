@@ -42,8 +42,8 @@ class HandleInertiaRequests extends Middleware
                 'location'     => $user->station->location,
             ] : null,
             'flash' => [
-                'success' => fn () => $request->session()->get('success'),
-                'error'   => fn () => $request->session()->get('error'),
+                'success' => fn() => $request->session()->get('success'),
+                'error'   => fn() => $request->session()->get('error'),
             ],
         ];
     }
