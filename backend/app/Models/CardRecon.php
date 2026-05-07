@@ -24,6 +24,11 @@ class CardRecon extends Model
 
     protected $appends = ['total_amount'];
 
+    public function station(): BelongsTo
+    {
+        return $this->belongsTo(Station::class);
+    }
+
     public function lines(): HasMany
     {
         return $this->hasMany(CardReconLine::class)->orderBy('trans_date')->orderBy('id');

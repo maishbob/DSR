@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ExportButtons from '@/Components/ExportButtons.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { fmt, fmtDate } from '@/composables/useFormatters';
@@ -44,6 +45,7 @@ function filter() {
             <button @click="window.print()" class="border border-gray-300 px-4 py-2 rounded-lg text-sm hover:bg-gray-50">
                 Print
             </button>
+            <ExportButtons :url="route('reports.wet-stock')" :params="{ from: fromDate, to: toDate }" />
         </div>
 
         <div class="bg-white rounded-xl shadow-sm overflow-x-auto">

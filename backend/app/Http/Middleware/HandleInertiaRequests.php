@@ -35,15 +35,20 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => [
                 'user' => $user,
+                'isSuperAdmin' => $user?->isSuperAdmin() ?? false,
             ],
-            'currentStation' => $user?->station ? [
-                'id'           => $user->station->id,
-                'station_name' => $user->station->station_name,
-                'location'     => $user->station->location,
-            ] : null,
+            'currentStation' => function () use ($user) {
+                $station = $user?->station;
+                return $station ? [
+                    'id'           => $station->id,
+                    'station_name' => $station->station_name,
+                    'location'     => $station->location,
+                ] : null;
+            },
             'flash' => [
-                'success' => fn() => $request->session()->get('success'),
-                'error'   => fn() => $request->session()->get('error'),
+                'success'     => fn() => $request->session()->get('success'),
+                'error'       => fn() => $request->session()->get('error'),
+                'importStats' => fn() => $request->session()->get('importStats'),
             ],
         ];
     }

@@ -21,6 +21,11 @@ class PosTransaction extends Model
         'amount' => 'decimal:2',
     ];
 
+    public function station(): BelongsTo
+    {
+        return $this->belongsTo(Station::class);
+    }
+
     public function shift()
     {
         return $this->belongsTo(Shift::class);

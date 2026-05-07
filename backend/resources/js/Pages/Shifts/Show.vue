@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ConfirmModal from '@/Components/ConfirmModal.vue';
 import { Head, useForm, Link, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
-import { fmt, fmt2 } from '@/composables/useFormatters';
+import { fmt, fmt2, fmtDate as fmtShiftDate } from '@/composables/useFormatters';
 
 const props = defineProps({
     shift: Object,
@@ -479,7 +479,8 @@ function generateDsr() {
             <div class="flex items-center justify-between">
                 <div>
                     <h2 class="text-xl font-semibold text-gray-800">
-                        {{ shift.shift_type === 'day' ? 'Day' : 'Night' }} Shift &mdash; {{ shift.shift_date }}
+                        {{ shift.shift_type === 'day' ? 'Day' : 'Night' }} Shift &mdash; {{ fmtShiftDate(shift.shift_date) }}
+                        <span v-if="shift.dsr_number" class="text-gray-400 font-normal text-base ml-2">DSR #{{ shift.dsr_number }}</span>
                     </h2>
                     <p class="text-sm text-gray-500 mt-0.5">
                         {{ station.station_name }} &bull;
@@ -553,7 +554,7 @@ function generateDsr() {
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
-                                    <tr v-for="nozzle in (station.pump_nozzles ?? [])" :key="nozzle.id"
+                                    <tr v-for="nozzle in [...(station.pump_nozzles ?? [])].sort((a, b) => (a.nozzle_name ?? '').localeCompare(b.nozzle_name ?? ''))" :key="nozzle.id"
                                         class="hover:bg-blue-50 cursor-pointer"
                                         @click="!isLocked && (meterForm.nozzle_id = String(nozzle.id), onNozzleSelect())">
                                         <td class="px-3 py-2 font-medium">
@@ -1264,22 +1265,25 @@ function generateDsr() {
                                         <th class="py-1 text-right">Sales Amount</th>
                                         <th class="py-1 text-right">Sales Qty</th>
                                         <th class="py-1 text-right">Purchases</th>
+                                        <th class="py-1 text-right">Price</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100">
                                     <tr v-for="row in fuelSummary" :key="row.name" class="text-gray-700">
                                         <td class="py-1 uppercase">{{ row.name }}</td>
                                         <td class="py-1 text-right font-mono">{{ row.litres > 0 ? fmt2(row.revenue) : '' }}</td>
-                                        <td class="py-1 text-right font-mono">{{ row.litres > 0 ? fmt(row.litres, 3) : '' }}</td>
+                                        <td class="py-1 text-right font-mono">{{ row.litres > 0 ? fmt2(row.litres) : '' }}</td>
                                         <td class="py-1 text-right font-mono"></td>
+                                        <td class="py-1 text-right font-mono">{{ row.price > 0 ? fmt2(row.price) : '' }}</td>
                                     </tr>
                                 </tbody>
                                 <tfoot>
                                     <tr class="font-bold border-t border-gray-300">
                                         <td class="py-2">Total Fuel Sales:</td>
                                         <td class="py-2 text-right font-mono">{{ fmt2(totalFuelRevenue) }}</td>
-                                        <td class="py-2 text-right font-mono">{{ fmt(totalFuelLitres, 3) }}</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt2(totalFuelLitres) }}</td>
                                         <td class="py-2 text-right font-mono">0.00</td>
+                                        <td class="py-2"></td>
                                     </tr>
                                 </tfoot>
                             </table>

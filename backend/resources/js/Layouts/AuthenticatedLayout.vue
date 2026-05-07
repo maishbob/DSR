@@ -6,6 +6,8 @@ const page = usePage();
 const user = computed(() => page.props.auth.user);
 const currentStation = computed(() => page.props.currentStation);
 const isOwner = computed(() => user.value?.role === 'owner');
+const isManager = computed(() => ['owner', 'manager'].includes(user.value?.role));
+const isSuperAdmin = computed(() => page.props.auth.isSuperAdmin);
 
 // ── Sidebar state ──────────────────────────────────────────────
 const sidebarOpen   = ref(false);
@@ -50,12 +52,27 @@ const icons = {
     receipt:            'M9 7H6a2 2 0 00-2 2v9a2 2 0 002 2h9a2 2 0 002-2v-3M9 7V5a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2h-2M9 7h2a2 2 0 012 2v2',
     'chart-bar':        'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
     cog:                'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+    history:            'M3 10a7 7 0 1110.95 5.788M3 10v4h4M12 7v5l3 2',
+    upload:             'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12',
+    shield:             'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+    building:           'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
 };
 
 // ── Nav structure ──────────────────────────────────────────────
 const openGroup = ref(null);
 
-const navGroups = [
+const navGroups = computed(() => {
+    if (isSuperAdmin.value) {
+        return [{
+            label: 'Admin',
+            items: [
+                { label: 'Owners',   route: 'admin.owners',   icon: 'shield' },
+                { label: 'Stations', route: 'admin.stations', icon: 'building' },
+            ],
+        }];
+    }
+
+    return [
     {
         label: 'Operations',
         items: [
@@ -89,9 +106,12 @@ const navGroups = [
         label: 'Settings',
         items: [
             { label: 'Station Settings', route: 'station.settings', icon: 'cog' },
+            ...(isManager.value ? [{ label: 'Audit Log', route: 'audit-log.index', icon: 'history' }] : []),
+            { label: 'Import Legacy Data', route: 'station.import', icon: 'upload' },
         ],
     },
-];
+    ];
+});
 
 onMounted(() => {
     const reportRoutes = ['reports.sales','reports.wet-stock','reports.deliveries','reports.variance'];
@@ -104,7 +124,7 @@ function toggleGroup(label) {
 </script>
 
 <template>
-    <div class="min-h-screen bg-gray-100 flex font-sans antialiased">
+    <div class="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-slate-100 flex font-sans antialiased">
 
         <!-- Mobile overlay -->
         <Transition enter-from-class="opacity-0" leave-to-class="opacity-0"
@@ -115,20 +135,20 @@ function toggleGroup(label) {
         </Transition>
 
         <!-- ── Sidebar ── -->
-        <aside class="fixed top-0 left-0 h-full z-40 flex flex-col w-64 bg-slate-900 transition-transform duration-300 ease-in-out"
-            :class="(sidebarOpen || sidebarPinned) ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'">
+        <aside class="fixed top-0 left-0 h-full z-40 flex flex-col w-64 bg-gradient-to-b from-slate-900 to-slate-950 transition-transform duration-300 ease-in-out shadow-2xl"
+            :class="(sidebarOpen || sidebarPinned) ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
 
             <!-- Brand -->
-            <div class="flex items-center justify-between h-16 px-5 bg-slate-950 flex-shrink-0">
-                <Link :href="route('dashboard')" class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0 shadow">
+            <div class="flex items-center justify-between h-16 px-5 border-b border-slate-800/60 flex-shrink-0">
+                <Link :href="route('dashboard')" class="flex items-center gap-3 group">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-500/20 group-hover:shadow-orange-500/40 transition-shadow">
                         <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                         </svg>
                     </div>
                     <div>
                         <p class="text-white font-bold text-sm leading-tight tracking-wide">FuelOps</p>
-                        <p class="text-slate-400 text-xs leading-tight">DSR Platform</p>
+                        <p class="text-slate-500 text-[11px] leading-tight">DSR Platform</p>
                     </div>
                 </Link>
                 <button @click="togglePin"
@@ -142,7 +162,7 @@ function toggleGroup(label) {
             </div>
 
             <!-- Nav -->
-            <nav aria-label="Main navigation" class="flex-1 overflow-y-auto py-4 px-3 space-y-5">
+            <nav aria-label="Main navigation" class="flex-1 overflow-y-auto sidebar-scroll py-4 px-3 space-y-5">
                 <template v-for="group in navGroups" :key="group.label">
 
                     <!-- Collapsible group -->
@@ -199,7 +219,7 @@ function toggleGroup(label) {
             </nav>
 
             <!-- User section -->
-            <div class="border-t border-slate-800 p-4 flex-shrink-0">
+            <div class="border-t border-slate-800/60 p-4 flex-shrink-0 bg-slate-950/30">
                 <div class="flex items-center gap-3">
                     <div class="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center flex-shrink-0 shadow">
                         <span class="text-white text-sm font-bold">{{ user?.name?.charAt(0)?.toUpperCase() }}</span>
@@ -224,7 +244,7 @@ function toggleGroup(label) {
         <div class="flex-1 flex flex-col min-w-0" :class="sidebarPinned ? 'lg:ml-64' : ''">
 
             <!-- Top navbar -->
-            <header class="sticky top-0 z-20 bg-white border-b border-gray-200 h-16 flex items-center gap-4 px-4 lg:px-6 shadow-sm flex-shrink-0">
+            <header class="sticky top-0 z-20 bg-white/80 backdrop-blur-lg border-b border-gray-200/60 h-16 flex items-center gap-4 px-4 lg:px-6 flex-shrink-0">
                 <button @click="sidebarOpen = !sidebarOpen"
                     aria-label="Toggle navigation menu"
                     class="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
@@ -240,7 +260,7 @@ function toggleGroup(label) {
 
                 <div class="flex items-center gap-3 flex-shrink-0">
                     <!-- Station indicator + switch (owners) -->
-                    <div v-if="currentStation" class="hidden sm:flex items-center gap-2">
+                    <div v-if="currentStation && !isSuperAdmin" class="hidden sm:flex items-center gap-2">
                         <div class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-full">
                             <svg class="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -274,8 +294,8 @@ function toggleGroup(label) {
             </main>
 
             <!-- Footer -->
-            <footer class="px-6 py-3 bg-white border-t border-gray-200 flex items-center justify-between flex-shrink-0">
-                <p class="text-xs text-gray-400">FuelOps DSR © {{ new Date().getFullYear() }}</p>
+            <footer class="px-6 py-3 bg-white/50 backdrop-blur-sm border-t border-gray-200/60 flex items-center justify-between flex-shrink-0">
+                <p class="text-xs text-gray-400">FuelOps DSR &copy; {{ new Date().getFullYear() }}</p>
                 <p class="text-xs text-gray-400">Powered by Laravel + Vue 3</p>
             </footer>
         </div>
@@ -289,8 +309,8 @@ function toggleGroup(label) {
             <div v-if="toast"
                 role="status"
                 aria-live="polite"
-                class="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border max-w-sm"
-                :class="toastType === 'success' ? 'bg-white border-green-200 text-green-800' : 'bg-white border-red-200 text-red-800'">
+                class="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl border max-w-sm backdrop-blur-sm animate-slide-up"
+                :class="toastType === 'success' ? 'bg-white/95 border-green-200 text-green-800' : 'bg-white/95 border-red-200 text-red-800'">
                 <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
                     :class="toastType === 'success' ? 'bg-green-100' : 'bg-red-100'">
                     <svg v-if="toastType === 'success'" class="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

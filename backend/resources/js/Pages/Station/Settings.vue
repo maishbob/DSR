@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ConfirmModal from '@/Components/ConfirmModal.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
-import { fmt, fmtDate } from '@/composables/useFormatters';
+import { fmt, fmtDate, fmtReading } from '@/composables/useFormatters';
 
 const props = defineProps({
     station: Object,
@@ -386,7 +386,7 @@ function fmtReading(n) {
                                     @click="openEditTank(t)">
                                     <td class="px-4 py-3 font-medium text-gray-800">{{ t.tank_name }}</td>
                                     <td class="px-4 py-3 text-gray-600">{{ t.product?.product_name }}</td>
-                                    <td class="px-4 py-3 text-right font-mono text-xs">{{ Number(t.tank_capacity).toLocaleString() }}</td>
+                                    <td class="px-4 py-3 text-right font-mono text-xs">{{ fmt(t.tank_capacity) }}</td>
                                     <td class="px-4 py-3 text-right font-mono text-xs text-gray-500">
                                         {{ t.last_closing_stock != null ? Number(t.last_closing_stock).toFixed(2) : '—' }}
                                     </td>
@@ -692,11 +692,11 @@ function fmtReading(n) {
                                     class="border-t border-gray-100 hover:bg-blue-50 cursor-pointer"
                                     @click="openEditShop(sp)">
                                     <td class="px-4 py-3 font-medium text-gray-800">{{ sp.product_name }}</td>
-                                    <td class="px-4 py-3 text-right font-mono">{{ Number(sp.forecourt_stock).toLocaleString('en-KE', {minimumFractionDigits:0}) }}</td>
-                                    <td class="px-4 py-3 text-right font-mono text-gray-500">{{ Number(sp.store_stock).toLocaleString('en-KE', {minimumFractionDigits:0}) }}</td>
-                                    <td class="px-4 py-3 text-right font-mono font-semibold">{{ Number(sp.current_stock).toLocaleString('en-KE', {minimumFractionDigits:0}) }}</td>
-                                    <td class="px-4 py-3 text-right font-mono">{{ Number(sp.current_price).toLocaleString('en-KE', {minimumFractionDigits:2}) }}</td>
-                                    <td class="px-4 py-3 text-right font-mono text-gray-500">{{ sp.cost ? Number(sp.cost).toLocaleString('en-KE', {minimumFractionDigits:2}) : '—' }}</td>
+                                    <td class="px-4 py-3 text-right font-mono">{{ fmt(sp.forecourt_stock, 0) }}</td>
+                                    <td class="px-4 py-3 text-right font-mono text-gray-500">{{ fmt(sp.store_stock, 0) }}</td>
+                                    <td class="px-4 py-3 text-right font-mono font-semibold">{{ fmt(sp.current_stock, 0) }}</td>
+                                    <td class="px-4 py-3 text-right font-mono">{{ fmt(sp.current_price) }}</td>
+                                    <td class="px-4 py-3 text-right font-mono text-gray-500">{{ sp.cost ? fmt(sp.cost) : '—' }}</td>
                                     <td class="px-4 py-3">
                                         <span class="px-2 py-0.5 text-xs rounded-full"
                                             :class="sp.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'">
@@ -899,9 +899,9 @@ function fmtReading(n) {
                                     <td class="px-3 py-1.5 font-mono text-xs text-gray-500">
                                         {{ sale.shift?.daily_sales_record?.serial_number ?? '—' }}
                                     </td>
-                                    <td class="px-3 py-1.5 text-xs">{{ sale.shift?.shift_date }}</td>
+                                    <td class="px-3 py-1.5 text-xs">{{ fmtDate(sale.shift?.shift_date) }}</td>
                                     <td class="px-3 py-1.5 text-right font-mono">{{ sale.quantity }}</td>
-                                    <td class="px-3 py-1.5 text-right font-mono">{{ Number(sale.unit_price).toLocaleString('en-KE', {minimumFractionDigits:2}) }}</td>
+                                    <td class="px-3 py-1.5 text-right font-mono">{{ fmt(sale.unit_price) }}</td>
                                 </tr>
                                 <tr v-if="!(editingShopProduct?.oil_sales ?? []).length">
                                     <td colspan="4" class="px-3 py-4 text-center text-gray-400">No sales recorded</td>
@@ -1127,7 +1127,7 @@ function fmtReading(n) {
                             <span>Shs:</span>
                             <span class="font-mono">
                                 {{ editingNozzle.latest_reading.closing_shs != null
-                                    ? Number(editingNozzle.latest_reading.closing_shs).toLocaleString('en-KE', {minimumFractionDigits:2})
+                                    ? fmtReading(editingNozzle.latest_reading.closing_shs, 2)
                                     : '—' }}
                             </span>
                         </div>

@@ -32,6 +32,7 @@ class DailySalesRecord extends Model
         'total_pos_sales',
         'cash_collected',
         'mpesa_collected',
+        'total_cash_sales',
         // Other
         'total_oil_sales',
         'total_expenses',
@@ -58,6 +59,7 @@ class DailySalesRecord extends Model
     protected $casts = [
         'shift_date'         => 'date',
         'total_litres_sold'  => 'decimal:3',
+        'total_cash_sales'   => 'decimal:2',
         'total_revenue'      => 'decimal:2',
         'total_fuel_sales'   => 'decimal:2',
         'total_credit_sales' => 'decimal:2',
@@ -96,6 +98,16 @@ class DailySalesRecord extends Model
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function preparedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'prepared_by');
+    }
+
+    public function verifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by');
     }
 
     public function lineItems(): HasMany

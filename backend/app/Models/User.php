@@ -15,8 +15,12 @@ class User extends Authenticatable
     use HasFactory, Notifiable;
 
     protected $fillable = [
-        'name', 'email', 'password',
-        'owner_id', 'station_id', 'role',
+        'name',
+        'email',
+        'password',
+        'owner_id',
+        'station_id',
+        'role',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -47,6 +51,11 @@ class User extends Authenticatable
     public function isOwner(): bool
     {
         return $this->role === 'owner';
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'super_admin';
     }
 
     public function isManager(): bool

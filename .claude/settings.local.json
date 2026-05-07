@@ -42,7 +42,15 @@
       "Bash(zip -r deploy/backend.zip backend/ --exclude \"backend/node_modules/*\" --exclude \"backend/.git/*\" --exclude \"backend/storage/logs/*.log\" --exclude \"backend/.env\")",
       "Bash(powershell -Command \":*)",
       "Bash(powershell -Command \"Start-Sleep -Seconds 5; $dest = ''C:\\\\laragon\\\\www\\\\DSR\\\\deploy\\\\backend.zip''; Write-Host \\(''Size: '' + [math]::Round\\(\\(Get-Item $dest\\).Length / 1MB, 1\\) + '' MB''\\)\")",
-      "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\laragon\\\\www\\\\DSR\\\\deploy\\\\make_zip.ps1\")"
+      "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\laragon\\\\www\\\\DSR\\\\deploy\\\\make_zip.ps1\")",
+      "Read(//c/laragon/www/DSR/backend/**)",
+      "Bash(npx vite:*)",
+      "Bash(php -i)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173/)",
+      "Bash(cat vite.config.*)",
+      "Read(//c/laragon/www/DSR/**)",
+      "Bash(ls -lh c:/laragon/www/DSR/backend/database/migrations/*.csv)",
+      "Bash(php -r ':*)"
     ],
     "additionalDirectories": [
       "C:\\laragon\\etc\\apache2\\sites-enabled"

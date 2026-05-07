@@ -15,6 +15,7 @@ class Shift extends Model
         'station_id',
         'shift_date',
         'shift_type',
+        'dsr_number',
         'opened_at',
         'closed_at',
         'status',
@@ -91,6 +92,11 @@ class Shift extends Model
     public function dailySalesRecord(): HasOne
     {
         return $this->hasOne(DailySalesRecord::class);
+    }
+
+    public function financialTransactions(): HasMany
+    {
+        return $this->hasMany(FinancialTransaction::class);
     }
 
     public function isLocked(): bool

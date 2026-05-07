@@ -49,19 +49,5 @@ class CreditCustomer extends Model
     {
         return $this->hasMany(Payment::class);
     }
-
-    public function getTotalPurchasesAttribute(): float
-    {
-        return (float)$this->creditSales()->sum('total_value');
-    }
-
-    public function getTotalPaidAttribute(): float
-    {
-        return (float)$this->payments()->sum('amount');
-    }
-
-    public function getBalanceAttribute(): float
-    {
-        return round((float)$this->initial_opening_balance + $this->total_purchases - $this->total_paid, 2);
-    }
 }
+

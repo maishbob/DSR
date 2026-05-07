@@ -18,6 +18,12 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $user    = $request->user();
+
+        // Super admins go to their admin area
+        if ($user->isSuperAdmin()) {
+            return redirect()->route('admin.owners');
+        }
+
         $station = $this->resolveStation($user, $request);
 
         // Owner with no station selected → station picker
@@ -26,69 +32,11 @@ class DashboardController extends Controller
         }
 
         $today   = now()->toDateString();
+        $kpis    = $this->reportService->dashboardKpis($station, $today);
 
-        // Today's DSR totals
-        $todayDsrs = DailySalesRecord::where('station_id', $station->id)
-            ->where('shift_date', $today)
-            ->get();
-
-        $todayRevenue = $todayDsrs->sum('total_revenue');
-        $todayLitres  = $todayDsrs->sum('total_litres_sold');
-        $todayVariance = $todayDsrs->sum('variance');
-
-        // Open shifts
-        $openShifts = Shift::where('station_id', $station->id)
-            ->where('status', 'open')
-            ->with(['meterReadings.nozzle.product', 'tankDips.tank'])
-            ->get();
-
-        // Recent deliveries (last 7 days)
-        $recentDeliveries = Delivery::where('station_id', $station->id)
-            ->where('delivery_date', '>=', now()->subDays(7)->toDateString())
-            ->with(['product', 'tank'])
-            ->orderByDesc('delivery_date')
-            ->limit(10)
-            ->get();
-
-        // Last 7 days revenue trend
-        $revenueTrend = DailySalesRecord::where('station_id', $station->id)
-            ->where('shift_date', '>=', now()->subDays(7)->toDateString())
-            ->select(
-                'shift_date',
-                DB::raw('SUM(total_revenue) as revenue'),
-                DB::raw('SUM(total_litres_sold) as litres')
-            )
-            ->groupBy('shift_date')
-            ->orderBy('shift_date')
-            ->get();
-
-        // Credit balances (top 5 debtors)
-        $topDebtors = DB::table('credit_customers')
-            ->where('credit_customers.station_id', $station->id)
-            ->where('credit_customers.is_active', true)
-            ->select(
-                'credit_customers.id',
-                'credit_customers.customer_name',
-                DB::raw('credit_customers.initial_opening_balance
-                    + COALESCE((SELECT SUM(cs.total_value) FROM credit_sales cs WHERE cs.credit_customer_id = credit_customers.id), 0)
-                    - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.credit_customer_id = credit_customers.id), 0)
-                    as balance')
-            )
-            ->having('balance', '>', 0)
-            ->orderByDesc('balance')
-            ->limit(5)
-            ->get();
-
-        return Inertia::render('Dashboard', [
-            'station'          => $station,
-            'todayRevenue'     => $todayRevenue,
-            'todayLitres'      => $todayLitres,
-            'todayVariance'    => $todayVariance,
-            'openShifts'       => $openShifts,
-            'recentDeliveries' => $recentDeliveries,
-            'revenueTrend'     => $revenueTrend,
-            'topDebtors'       => $topDebtors,
-        ]);
+        return Inertia::render('Dashboard', array_merge([
+            'station' => $station,
+        ], $kpis));
     }
 
     public function ownerDashboard(Request $request)
@@ -114,6 +62,12 @@ class DashboardController extends Controller
     public function selectStation(Request $request)
     {
         $user  = $request->user();
+
+        // Super admins don't need station selection
+        if ($user->isSuperAdmin()) {
+            return redirect()->route('admin.owners');
+        }
+
         $owner = $user->ownedAccount;
 
         if (! $owner) {

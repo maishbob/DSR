@@ -8,9 +8,21 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Station extends Model
 {
-    protected $fillable = ['owner_id', 'station_name', 'location', 'timezone', 'is_active'];
+    protected $fillable = [
+        'owner_id',
+        'station_name',
+        'location',
+        'timezone',
+        'is_active',
+        'vat_rate',
+        'wht_rate',
+    ];
 
-    protected $casts = ['is_active' => 'boolean'];
+    protected $casts = [
+        'is_active' => 'boolean',
+        'vat_rate'  => 'decimal:4',
+        'wht_rate'  => 'decimal:4',
+    ];
 
     public function owner(): BelongsTo
     {

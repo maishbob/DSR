@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\CardPaymentController;
 use App\Http\Controllers\CardReconController;
 use App\Http\Controllers\PaymentController;
@@ -8,6 +10,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeliveryController;
 use App\Http\Controllers\DsrController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\ImportController;
 use App\Http\Controllers\MeterReadingController;
 use App\Http\Controllers\OilSaleController;
 use App\Http\Controllers\PosTransactionController;
@@ -42,6 +45,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/station/tanks', [StationController::class, 'storeTank'])->name('station.tanks.store');
     Route::put('/station/tanks/{tank}', [StationController::class, 'updateTank'])->name('station.tanks.update');
     Route::post('/station/prices', [StationController::class, 'storePrice'])->name('station.prices.store');
+
+    // Legacy import
+    Route::get('/station/import', [ImportController::class, 'show'])->name('station.import');
+    Route::post('/station/import/products', [ImportController::class, 'importProducts'])->name('station.import.products');
+    Route::post('/station/import/tanks', [ImportController::class, 'importTanks'])->name('station.import.tanks');
+    Route::post('/station/import/pumps', [ImportController::class, 'importPumps'])->name('station.import.pumps');
+    Route::post('/station/import/shifts', [ImportController::class, 'importShifts'])->name('station.import.shifts');
+    Route::post('/station/import/readings', [ImportController::class, 'importReadings'])->name('station.import.readings');
+    Route::post('/station/import/credits', [ImportController::class, 'importCredits'])->name('station.import.credits');
+    Route::post('/station/import/oil-stock', [ImportController::class, 'importOilStock'])->name('station.import.oil-stock');
+    Route::post('/station/import/oil-sales', [ImportController::class, 'importOilSales'])->name('station.import.oil-sales');
 
     // Shifts
     Route::get('/shifts', [ShiftController::class, 'index'])->name('shifts.index');
@@ -120,6 +134,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/dsr/{dsr}/approve', [DsrController::class, 'approve'])->name('dsr.approve');
     Route::post('/dsr/{dsr}/adjustments', [DsrController::class, 'storeAdjustment'])->name('dsr.adjustments.store');
 
+    // Audit log (managers + super admins)
+    Route::get('/audit-log', [AuditLogController::class, 'index'])->name('audit-log.index');
+
     // Reports
     Route::get('/reports/wet-stock', [ReportController::class, 'wetStock'])->name('reports.wet-stock');
     Route::get('/reports/sales', [ReportController::class, 'salesSummary'])->name('reports.sales');
@@ -131,6 +148,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // Admin (super_admin only)
+    Route::prefix('admin')->middleware('super_admin')->group(function () {
+        Route::get('/owners', [AdminController::class, 'owners'])->name('admin.owners');
+        Route::post('/owners', [AdminController::class, 'storeOwner'])->name('admin.owners.store');
+        Route::put('/owners/{owner}', [AdminController::class, 'updateOwner'])->name('admin.owners.update');
+        Route::post('/users/{user}/reset-password', [AdminController::class, 'resetPassword'])->name('admin.users.reset-password');
+        Route::get('/stations', [AdminController::class, 'stations'])->name('admin.stations');
+        Route::post('/stations', [AdminController::class, 'storeStation'])->name('admin.stations.store');
+        Route::put('/stations/{station}', [AdminController::class, 'updateStation'])->name('admin.stations.update');
+    });
 });
 
 require __DIR__ . '/auth.php';

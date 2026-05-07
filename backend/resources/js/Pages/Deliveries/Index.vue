@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, Link, router } from '@inertiajs/vue3';
+import { fmt, fmtDate } from '@/composables/useFormatters';
 import { ref, computed } from 'vue';
 
 const props = defineProps({
@@ -35,12 +36,6 @@ function submit() {
     });
 }
 
-function fmt(n, dec = 2) {
-    return Number(n ?? 0).toLocaleString('en-KE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
-}
-function fmtDate(d) {
-    return d ? new Date(d).toLocaleDateString('en-KE') : '—';
-}
 </script>
 
 <template>

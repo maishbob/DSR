@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ExportButtons from '@/Components/ExportButtons.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import { fmt, fmtDate } from '@/composables/useFormatters';
@@ -31,6 +32,7 @@ function filter() {
                 <input type="date" v-model="toDate" class="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <button @click="filter" class="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-600">Apply</button>
+            <ExportButtons :url="route('reports.variance')" :params="{ from: fromDate, to: toDate }" />
         </div>
 
         <div class="bg-white rounded-xl shadow-sm overflow-x-auto">

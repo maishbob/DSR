@@ -7,6 +7,7 @@ use App\Services\CashReconciliationService;
 use App\Services\DsrService;
 use App\Services\ShiftService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,27 +22,35 @@ class ShiftController extends Controller
     public function index(Request $request): Response
     {
         $station = $request->user()->station;
-        $date = $request->get('date', now()->toDateString());
+        $date = $request->get('date');
 
-        $shifts = Shift::where('station_id', $station->id)
-            ->where('shift_date', $date)
-            ->with([
-                'meterReadings.nozzle.product',
-                'tankDips.tank.product',
-                'deliveries.product',
-                'creditSales.creditCustomer',
-                'oilSales.shopProduct',
-                'cardPayments',
-                'posTransactions',
-                'expenses',
-                'dailySalesRecord',
-                'openedBy',
+        $query = Shift::where('station_id', $station->id)
+            ->select('shifts.*')
+            ->addSelect([
+                'fuel_sales_total' => DB::table('meter_readings')
+                    ->join('pump_nozzles', 'pump_nozzles.id', '=', 'meter_readings.nozzle_id')
+                    ->join('price_histories', function ($join) {
+                        $join->on('price_histories.product_id', '=', 'pump_nozzles.product_id')
+                            ->whereNull('price_histories.effective_to');
+                    })
+                    ->whereColumn('meter_readings.shift_id', 'shifts.id')
+                    ->selectRaw('SUM(meter_readings.litres_sold * price_histories.price_per_litre)')
             ])
-            ->get();
+            ->withSum('oilSales as oil_sales_total', 'total_value')
+            ->withCount('expenses')
+            ->with(['dailySalesRecord', 'openedBy'])
+            ->orderByDesc('shift_date')
+            ->orderByDesc('shift_type');
+
+        if ($date) {
+            $query->where('shift_date', $date);
+        }
+
+        $shifts = $query->paginate(20)->withQueryString();
 
         return Inertia::render('Shifts/Index', [
             'shifts'  => $shifts,
-            'date'    => $date,
+            'date'    => $date ?? '',
             'station' => $station,
         ]);
     }
@@ -170,7 +179,7 @@ class ShiftController extends Controller
                 'actual_cash'    => $recon['actual_cash'],
                 'expected_cash'  => $recon['expected_cash'],
                 'variance'       => $recon['variance'],
-                'variance_status'=> $recon['variance_status'],
+                'variance_status' => $recon['variance_status'],
             ],
             'ip_address' => request()->ip(),
         ]);

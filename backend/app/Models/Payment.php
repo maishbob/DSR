@@ -26,7 +26,13 @@ class Payment extends Model
     protected $casts = [
         'payment_date' => 'date',
         'amount'       => 'decimal:2',
+        'is_locked'    => 'boolean',
     ];
+
+    public function station(): BelongsTo
+    {
+        return $this->belongsTo(Station::class);
+    }
 
     public function creditCustomer(): BelongsTo
     {

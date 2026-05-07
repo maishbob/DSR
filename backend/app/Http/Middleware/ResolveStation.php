@@ -2,7 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\Station;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -33,13 +32,23 @@ class ResolveStation
             return $next($request);
         }
 
+        // Super admins don't need a station
+        if ($user->isSuperAdmin()) {
+            return $next($request);
+        }
+
+        // Allow admin routes through
+        $currentRoute = $request->route()?->getName();
+        if ($currentRoute && str_starts_with($currentRoute, 'admin.')) {
+            return $next($request);
+        }
+
         // Non-owner users always have their assigned station
         if (! $user->isOwner() || ! $user->ownedAccount) {
             return $next($request);
         }
 
         // Allow exempt routes through without station
-        $currentRoute = $request->route()?->getName();
         if ($currentRoute && in_array($currentRoute, $this->except)) {
             return $next($request);
         }

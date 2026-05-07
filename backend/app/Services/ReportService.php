@@ -143,4 +143,67 @@ class ReportService
             ->get()
             ->toArray();
     }
+
+    /**
+     * Dashboard KPIs for a station on a given date.
+     */
+    public function dashboardKpis(Station $station, string $date): array
+    {
+        $todayDsrs = DailySalesRecord::where('station_id', $station->id)
+            ->where('shift_date', $date)
+            ->get();
+
+        $todayRevenue = $todayDsrs->sum('total_revenue');
+        $todayLitres = $todayDsrs->sum('total_litres_sold');
+        $todayVariance = $todayDsrs->sum('variance');
+
+        $openShifts = Shift::where('station_id', $station->id)
+            ->where('status', 'open')
+            ->with(['meterReadings.nozzle.product', 'tankDips.tank'])
+            ->get();
+
+        $recentDeliveries = Delivery::where('station_id', $station->id)
+            ->where('delivery_date', '>=', now()->subDays(7)->toDateString())
+            ->with(['product', 'tank'])
+            ->orderByDesc('delivery_date')
+            ->limit(10)
+            ->get();
+
+        $revenueTrend = DailySalesRecord::where('station_id', $station->id)
+            ->where('shift_date', '>=', now()->subDays(7)->toDateString())
+            ->select(
+                'shift_date',
+                DB::raw('SUM(total_revenue) as revenue'),
+                DB::raw('SUM(total_litres_sold) as litres')
+            )
+            ->groupBy('shift_date')
+            ->orderBy('shift_date')
+            ->get();
+
+        $topDebtors = DB::table('credit_customers')
+            ->where('credit_customers.station_id', $station->id)
+            ->where('credit_customers.is_active', true)
+            ->select(
+                'credit_customers.id',
+                'credit_customers.customer_name',
+                DB::raw('credit_customers.initial_opening_balance
+                    + COALESCE((SELECT SUM(cs.total_value) FROM credit_sales cs WHERE cs.credit_customer_id = credit_customers.id), 0)
+                    - COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.credit_customer_id = credit_customers.id), 0)
+                    as balance')
+            )
+            ->having('balance', '>', 0)
+            ->orderByDesc('balance')
+            ->limit(5)
+            ->get();
+
+        return [
+            'todayRevenue'     => $todayRevenue,
+            'todayLitres'      => $todayLitres,
+            'todayVariance'    => $todayVariance,
+            'openShifts'       => $openShifts,
+            'recentDeliveries' => $recentDeliveries,
+            'revenueTrend'     => $revenueTrend,
+            'topDebtors'       => $topDebtors,
+        ];
+    }
 }

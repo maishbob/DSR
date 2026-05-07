@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToStation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Tank extends Model
 {
@@ -65,8 +66,8 @@ class Tank extends Model
         return $this->hasMany(PumpNozzle::class);
     }
 
-    public function latestDip(): ?TankDip
+    public function latestDip(): HasOne
     {
-        return $this->tankDips()->latest()->first();
+        return $this->hasOne(TankDip::class)->latestOfMany();
     }
 }

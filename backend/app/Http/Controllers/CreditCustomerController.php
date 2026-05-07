@@ -6,11 +6,14 @@ use App\Models\CreditCustomer;
 use App\Models\CreditSale;
 use App\Models\Payment;
 use App\Models\Shift;
+use App\Services\AuditService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class CreditCustomerController extends Controller
 {
+    public function __construct(private readonly AuditService $audit) {}
+
     public function index(Request $request)
     {
         $station = $request->user()->station;
@@ -52,8 +55,10 @@ class CreditCustomerController extends Controller
             'initial_opening_balance'  => 'nullable|numeric',
         ]);
 
-        $station = $request->user()->station;
-        CreditCustomer::create(array_merge($validated, ['station_id' => $station->id]));
+        $station  = $request->user()->station;
+        $customer = CreditCustomer::create(array_merge($validated, ['station_id' => $station->id]));
+
+        $this->audit->log('created', $customer, null, $customer->toArray(), $station->id);
 
         return back()->with('success', 'Customer added.');
     }
@@ -141,7 +146,10 @@ class CreditCustomerController extends Controller
             'is_active'                => 'boolean',
         ]);
 
+        $original = $creditCustomer->only(array_keys($validated));
         $creditCustomer->update($validated);
+
+        $this->audit->log('updated', $creditCustomer, $original, $creditCustomer->only(array_keys($validated)), $creditCustomer->station_id);
 
         return back()->with('success', 'Customer updated.');
     }
@@ -163,7 +171,9 @@ class CreditCustomerController extends Controller
         $shift = Shift::findOrFail($validated['shift_id']);
         if ($shift->isLocked()) abort(403, 'Shift is locked.');
 
-        CreditSale::create(array_merge($validated, ['entered_by' => auth()->id()]));
+        $sale = CreditSale::create(array_merge($validated, ['entered_by' => auth()->id()]));
+
+        $this->audit->log('created', $sale, null, $sale->toArray(), $shift->station_id);
 
         return back()->with('success', 'Credit sale recorded.');
     }
@@ -171,7 +181,12 @@ class CreditCustomerController extends Controller
     // Delete a credit sale
     public function destroySale(CreditSale $creditSale)
     {
+        $snapshot  = $creditSale->toArray();
+        $stationId = $creditSale->shift?->station_id;
         $creditSale->delete();
+
+        $this->audit->log('deleted', $creditSale, $snapshot, null, $stationId);
+
         return back()->with('success', 'Credit sale deleted.');
     }
 
@@ -188,11 +203,13 @@ class CreditCustomerController extends Controller
             'notes'          => 'nullable|string',
         ]);
 
-        Payment::create(array_merge($validated, [
+        $payment = Payment::create(array_merge($validated, [
             'credit_customer_id' => $creditCustomer->id,
             'station_id'         => $creditCustomer->station_id,
             'received_by'        => auth()->id(),
         ]));
+
+        $this->audit->log('created', $payment, null, $payment->toArray(), $creditCustomer->station_id);
 
         return back()->with('success', 'Payment recorded.');
     }

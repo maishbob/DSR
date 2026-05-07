@@ -27,7 +27,6 @@ class MeterReading extends Model
         'closing_electrical',
         'opening_shs',
         'closing_shs',
-        'litres_sold',
         'shs_sold',
         'entered_by',
         'is_locked',
@@ -41,6 +40,7 @@ class MeterReading extends Model
         'opening_shs'        => 'decimal:2',
         'closing_shs'        => 'decimal:2',
         'shs_sold'           => 'decimal:2',
+        'is_locked'          => 'boolean',
     ];
 
     protected $appends = ['litres_sold', 'mechanical_sales', 'shs_sold'];

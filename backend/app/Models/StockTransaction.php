@@ -24,6 +24,11 @@ class StockTransaction extends Model
         'quantity'   => 'decimal:3',
     ];
 
+    public function station(): BelongsTo
+    {
+        return $this->belongsTo(Station::class);
+    }
+
     public function shopProduct()
     {
         return $this->belongsTo(ShopProduct::class);

@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToStation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class Product extends Model
 {
@@ -51,9 +52,9 @@ class Product extends Model
         return $this->hasMany(Tank::class);
     }
 
-    public function meterReadings(): HasMany
+    public function meterReadings(): HasManyThrough
     {
-        return $this->hasMany(MeterReading::class);
+        return $this->hasManyThrough(MeterReading::class, PumpNozzle::class);
     }
 
     public function deliveries(): HasMany

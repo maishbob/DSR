@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ExportButtons from '@/Components/ExportButtons.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 import { fmt, fmtDate } from '@/composables/useFormatters';
@@ -47,6 +48,7 @@ const totals = computed(() => ({
             <button @click="filter" class="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-orange-600">
                 Apply
             </button>
+            <ExportButtons :url="route('reports.sales')" :params="{ from: fromDate, to: toDate }" />
         </div>
 
         <!-- Summary cards -->

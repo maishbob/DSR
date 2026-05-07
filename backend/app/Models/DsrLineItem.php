@@ -14,21 +14,23 @@ class DsrLineItem extends Model
         'opening_stock', 'deliveries', 'expected_stock',
         'actual_stock', 'variance',
         'credit_sales_litres', 'credit_sales_value',
+        'cumulative_variance_pct',
     ];
 
     protected $casts = [
-        'opening_meter'       => 'decimal:3',
-        'closing_meter'       => 'decimal:3',
-        'litres_sold'         => 'decimal:3',
-        'price_per_litre'     => 'decimal:4',
-        'revenue'             => 'decimal:2',
-        'opening_stock'       => 'decimal:3',
-        'deliveries'          => 'decimal:3',
-        'expected_stock'      => 'decimal:3',
-        'actual_stock'        => 'decimal:3',
-        'variance'            => 'decimal:3',
-        'credit_sales_litres' => 'decimal:3',
-        'credit_sales_value'  => 'decimal:2',
+        'opening_meter'           => 'decimal:3',
+        'closing_meter'           => 'decimal:3',
+        'litres_sold'             => 'decimal:3',
+        'price_per_litre'         => 'decimal:4',
+        'revenue'                 => 'decimal:2',
+        'opening_stock'           => 'decimal:3',
+        'deliveries'              => 'decimal:3',
+        'expected_stock'          => 'decimal:3',
+        'actual_stock'            => 'decimal:3',
+        'variance'                => 'decimal:3',
+        'credit_sales_litres'     => 'decimal:3',
+        'credit_sales_value'      => 'decimal:2',
+        'cumulative_variance_pct' => 'decimal:4',
     ];
 
     public function dailySalesRecord(): BelongsTo

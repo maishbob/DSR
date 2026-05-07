@@ -3,11 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Payment;
+use App\Services\AuditService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class PaymentController extends Controller
 {
+    public function __construct(private readonly AuditService $audit) {}
+
     public function index(Request $request)
     {
         $station = $request->user()->station;
@@ -36,14 +39,22 @@ class PaymentController extends Controller
             'notes'          => 'nullable|string',
         ]);
 
+        $original = $payment->only(array_keys($validated));
         $payment->update($validated);
+
+        $this->audit->log('updated', $payment, $original, $payment->only(array_keys($validated)), $payment->station_id);
 
         return back()->with('success', 'Payment updated.');
     }
 
     public function destroy(Payment $payment)
     {
+        $snapshot  = $payment->toArray();
+        $stationId = $payment->station_id;
         $payment->delete();
+
+        $this->audit->log('deleted', $payment, $snapshot, null, $stationId);
+
         return back()->with('success', 'Payment deleted.');
     }
 }

@@ -24,7 +24,10 @@ class PumpNozzle extends Model
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
+        'is_active'  => 'boolean',
+        'last_mech'  => 'decimal:1',
+        'last_elec'  => 'decimal:3',
+        'last_shs'   => 'decimal:2',
     ];
 
     public function station()

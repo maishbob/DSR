@@ -55,7 +55,7 @@ class ShiftService
         $today = now()->toDateString();
         $shifts = Shift::where('station_id', $station->id)
             ->where('shift_date', $today)
-            ->with(['meterReadings.product', 'tankDips.tank', 'dailySalesRecord'])
+            ->with(['meterReadings.nozzle.product', 'tankDips.tank', 'dailySalesRecord'])
             ->get();
 
         return $shifts->toArray();

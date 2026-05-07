@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/laragon/www/DSR/**)",
+      "Bash(php -l app/Http/Controllers/AuditLogController.php app/Http/Controllers/PaymentController.php app/Http/Controllers/ExpenseController.php app/Http/Controllers/CreditCustomerController.php app/Http/Controllers/DsrController.php)",
+      "mcp__code-review-graph__list_graph_stats_tool",
+      "mcp__code-review-graph__get_minimal_context_tool",
+      "Bash(Get-Content \"c:\\\\laragon\\\\www\\\\DSR\\\\backend\\\\resources\\\\js\\\\composables\\\\useFormatters.js\")",
+      "Bash(Measure-Object -Line)",
+      "Bash(Select-Object -ExpandProperty Lines)"
+    ]
+  }
+}

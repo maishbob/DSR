@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DailySalesRecord;
+use App\Services\AuditService;
 use App\Services\DsrService;
 use App\Services\VarianceEngine;
 use Illuminate\Http\Request;
@@ -13,6 +14,7 @@ class DsrController extends Controller
     public function __construct(
         private readonly DsrService $dsrService,
         private readonly VarianceEngine $varianceEngine,
+        private readonly AuditService $audit,
     ) {}
 
     public function index(Request $request)
@@ -89,6 +91,14 @@ class DsrController extends Controller
             ]);
         }
 
+        $this->audit->log('approved', $dsr, null, [
+            'dsr_number'      => $dsr->dsr_number,
+            'shift_date'      => (string) $dsr->shift_date,
+            'shift_type'      => $dsr->shift_type,
+            'variance_status' => $dsr->variance_status,
+            'override_reason' => $validated['override_reason'] ?? null,
+        ], $dsr->station_id);
+
         return redirect()->route('dsr.show', $dsr)
             ->with('success', 'DSR approved and locked.');
     }
@@ -114,10 +124,12 @@ class DsrController extends Controller
             'metadata'        => 'nullable|array',
         ]);
 
-        $dsr->adjustments()->create(array_merge($validated, [
+        $adjustment = $dsr->adjustments()->create(array_merge($validated, [
             'station_id' => $dsr->station_id,
             'created_by' => auth()->id(),
         ]));
+
+        $this->audit->log('created', $adjustment, null, $adjustment->toArray(), $dsr->station_id);
 
         return back()->with('success', 'Adjustment recorded.');
     }

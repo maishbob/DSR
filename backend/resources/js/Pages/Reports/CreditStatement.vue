@@ -1,5 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ExportButtons from '@/Components/ExportButtons.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { fmt, fmtDate } from '@/composables/useFormatters';
 
@@ -27,6 +28,13 @@ const props = defineProps({
                 </h1>
             </div>
         </template>
+
+        <div class="flex justify-end mb-4">
+            <ExportButtons
+                v-if="data?.customer?.id"
+                :url="route('reports.credit-statement', data.customer.id)"
+                :params="{ from, to }" />
+        </div>
 
         <div class="bg-white rounded-xl shadow-sm p-5 mb-6">
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
