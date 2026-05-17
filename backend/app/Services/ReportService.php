@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CreditCustomer;
 use App\Models\DailySalesRecord;
 use App\Models\Delivery;
+use App\Models\Shift;
 use App\Models\Station;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -205,5 +206,19 @@ class ReportService
             'revenueTrend'     => $revenueTrend,
             'topDebtors'       => $topDebtors,
         ];
+    }
+
+    public function dsrIncomeReport(Station $station, string $from, string $to): array
+    {
+        return DailySalesRecord::where('station_id', $station->id)
+            ->whereBetween('shift_date', [$from, $to])
+            ->orderBy('shift_date')
+            ->orderBy('shift_type')
+            ->get([
+                'shift_date', 'shift_type', 'serial_number',
+                'total_cash_sales', 'total_credit_sales', 'total_card_sales',
+                'total_pos_sales', 'mpesa_collected', 'total_revenue',
+            ])
+            ->toArray();
     }
 }

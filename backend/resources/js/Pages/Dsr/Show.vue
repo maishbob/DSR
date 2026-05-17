@@ -31,8 +31,10 @@ const adjForm = useForm({
 });
 
 const approveForm = useForm({ override_reason: '' });
+const reopenForm  = useForm({ reason: '' });
 const showAdjForm = ref(false);
 const showOverrideInput = ref(false);
+const showReopenInput   = ref(false);
 
 const varianceStatus = computed(() => props.dsr.variance_status ?? 'ok');
 const isCritical     = computed(() => varianceStatus.value === 'critical');
@@ -46,6 +48,19 @@ const varianceStatusClass = computed(() => ({
 function submitAdj() {
     adjForm.post(route('dsr.adjustments.store', props.dsr.id), {
         onSuccess: () => { showAdjForm.value = false; adjForm.reset(); },
+    });
+}
+
+function reopen() {
+    if (!reopenForm.reason.trim()) {
+        showReopenInput.value = true;
+        return;
+    }
+    openConfirm({
+        title: 'Reopen DSR',
+        message: 'This will unlock all records for this DSR so corrections can be made. The DSR will need to be regenerated and re-approved. Continue?',
+        variant: 'danger',
+        onConfirm: () => reopenForm.post(route('dsr.reopen', props.dsr.id)),
     });
 }
 
@@ -101,6 +116,10 @@ function print() {
                         class="text-white px-4 py-1.5 rounded-lg text-sm font-medium">
                         {{ isCritical ? 'Override & Approve' : 'Approve & Lock' }}
                     </button>
+                    <button v-if="dsr.locked && isManager" @click="showReopenInput = !showReopenInput"
+                        class="border border-red-400 text-red-600 px-4 py-1.5 rounded-lg text-sm hover:bg-red-50">
+                        Reopen DSR
+                    </button>
                     <button v-if="dsr.locked" @click="showAdjForm = !showAdjForm"
                         class="border border-orange-500 text-orange-600 px-4 py-1.5 rounded-lg text-sm hover:bg-orange-50">
                         Add Adjustment
@@ -125,6 +144,29 @@ function print() {
                     Confirm Override & Approve
                 </button>
                 <button @click="showOverrideInput = false"
+                    class="border border-gray-300 text-gray-700 px-4 py-1.5 rounded text-sm hover:bg-gray-50">
+                    Cancel
+                </button>
+            </div>
+        </div>
+
+        <!-- Reopen DSR reason input -->
+        <div v-if="showReopenInput && dsr.locked && isManager"
+            class="mb-4 rounded-lg border border-red-300 bg-red-50 p-4">
+            <p class="text-sm font-semibold text-red-800 mb-2">Reopen this DSR</p>
+            <p class="text-xs text-red-600 mb-3">
+                All records will be unlocked so corrections can be made. The DSR must be regenerated and re-approved afterwards.
+            </p>
+            <textarea v-model="reopenForm.reason" rows="2" placeholder="State the reason for reopening this DSR…"
+                class="w-full border border-red-300 rounded px-3 py-2 text-sm focus:ring-red-400 focus:border-red-400 mb-2"></textarea>
+            <p v-if="reopenForm.errors.reason" class="text-xs text-red-700 mb-2">{{ reopenForm.errors.reason }}</p>
+            <p v-if="reopenForm.errors.dsr" class="text-xs text-red-700 mb-2">{{ reopenForm.errors.dsr }}</p>
+            <div class="flex gap-2">
+                <button @click="reopen" :disabled="reopenForm.processing"
+                    class="bg-red-600 text-white px-4 py-1.5 rounded text-sm font-medium hover:bg-red-700 disabled:opacity-60">
+                    Confirm Reopen
+                </button>
+                <button @click="showReopenInput = false"
                     class="border border-gray-300 text-gray-700 px-4 py-1.5 rounded text-sm hover:bg-gray-50">
                     Cancel
                 </button>

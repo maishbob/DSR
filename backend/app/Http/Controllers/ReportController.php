@@ -144,6 +144,22 @@ class ReportController extends Controller
         ]);
     }
 
+    public function dsrIncome(Request $request)
+    {
+        $station = $request->user()->station;
+        $from    = $request->get('from', now()->startOfMonth()->toDateString());
+        $to      = $request->get('to', now()->toDateString());
+
+        $rows = $this->reportService->dsrIncomeReport($station, $from, $to);
+
+        return Inertia::render('Reports/DsrIncome', [
+            'rows'    => $rows,
+            'station' => $station,
+            'from'    => $from,
+            'to'      => $to,
+        ]);
+    }
+
     private function exportFormat(Request $request): ?string
     {
         $format = strtolower((string) $request->get('format', ''));

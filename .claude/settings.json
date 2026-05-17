@@ -7,7 +7,9 @@
       "mcp__code-review-graph__get_minimal_context_tool",
       "Bash(Get-Content \"c:\\\\laragon\\\\www\\\\DSR\\\\backend\\\\resources\\\\js\\\\composables\\\\useFormatters.js\")",
       "Bash(Measure-Object -Line)",
-      "Bash(Select-Object -ExpandProperty Lines)"
+      "Bash(Select-Object -ExpandProperty Lines)",
+      "PowerShell(Start-Process -FilePath \"cmd.exe\" -ArgumentList \"/c cd /d c:\\\\laragon\\\\www\\\\DSR\\\\backend && npm run dev\" -WindowStyle Normal)",
+      "Read(//c/laragon/www/DSR/clarion system/**)"
     ]
   }
 }

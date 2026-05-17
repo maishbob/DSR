@@ -265,11 +265,6 @@ function salesTotal(sp) {
     return (sp.oil_sales ?? []).reduce((s, t) => s + Number(t.quantity), 0);
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function fmtReading(n) {
-    if (n == null || n === undefined) return '—';
-    return Number(n).toFixed(3);
-}
 </script>
 
 <template>

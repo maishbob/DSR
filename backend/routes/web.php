@@ -132,6 +132,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dsr', [DsrController::class, 'index'])->name('dsr.index');
     Route::get('/dsr/{dsr}', [DsrController::class, 'show'])->name('dsr.show');
     Route::post('/dsr/{dsr}/approve', [DsrController::class, 'approve'])->name('dsr.approve');
+    Route::post('/dsr/{dsr}/reopen', [DsrController::class, 'reopen'])->name('dsr.reopen');
     Route::post('/dsr/{dsr}/adjustments', [DsrController::class, 'storeAdjustment'])->name('dsr.adjustments.store');
 
     // Audit log (managers + super admins)
@@ -142,6 +143,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/sales', [ReportController::class, 'salesSummary'])->name('reports.sales');
     Route::get('/reports/deliveries', [ReportController::class, 'deliveryHistory'])->name('reports.deliveries');
     Route::get('/reports/variance', [ReportController::class, 'varianceReport'])->name('reports.variance');
+    Route::get('/reports/dsr-income', [ReportController::class, 'dsrIncome'])->name('reports.dsr-income');
     Route::get('/reports/credit/{creditCustomer}', [ReportController::class, 'creditStatement'])->name('reports.credit-statement');
 
     // Profile (Breeze default)

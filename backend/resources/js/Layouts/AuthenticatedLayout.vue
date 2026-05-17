@@ -96,6 +96,7 @@ const navGroups = computed(() => {
         collapsible: true,
         icon: 'chart-bar',
         children: [
+            { label: 'DSR Income',    route: 'reports.dsr-income' },
             { label: 'Sales Summary', route: 'reports.sales' },
             { label: 'Wet Stock',     route: 'reports.wet-stock' },
             { label: 'Deliveries',    route: 'reports.deliveries' },
@@ -114,7 +115,7 @@ const navGroups = computed(() => {
 });
 
 onMounted(() => {
-    const reportRoutes = ['reports.sales','reports.wet-stock','reports.deliveries','reports.variance'];
+    const reportRoutes = ['reports.dsr-income','reports.sales','reports.wet-stock','reports.deliveries','reports.variance'];
     if (reportRoutes.some(r => isActive(r))) openGroup.value = 'Reports';
 });
 

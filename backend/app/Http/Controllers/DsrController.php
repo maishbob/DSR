@@ -104,6 +104,35 @@ class DsrController extends Controller
     }
 
     /**
+     * Reopen a locked DSR so corrections can be made before re-approval.
+     * Manager-only. Requires an explicit reason.
+     */
+    public function reopen(Request $request, DailySalesRecord $dsr)
+    {
+        abort_unless($request->user()->isManager(), 403, 'Only managers can reopen DSRs.');
+
+        if (!$dsr->locked) {
+            return back()->withErrors(['dsr' => 'This DSR is not locked.']);
+        }
+
+        $validated = $request->validate([
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        $this->dsrService->reopenDsr($dsr, $validated['reason']);
+
+        $this->audit->log('reopened', $dsr, null, [
+            'dsr_number' => $dsr->dsr_number ?? $dsr->id,
+            'shift_date' => (string) $dsr->shift_date,
+            'shift_type' => $dsr->shift_type,
+            'reason'     => $validated['reason'],
+        ], $dsr->station_id);
+
+        return redirect()->route('shifts.show', $dsr->shift_id)
+            ->with('success', 'DSR reopened. Make your corrections then regenerate and re-approve.');
+    }
+
+    /**
      * Store an adjustment on a locked DSR.
      * Corrections to live data must be made before generating the DSR.
      * Post-lock corrections go through this endpoint as compensating entries.

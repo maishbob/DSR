@@ -21,6 +21,7 @@ class Delivery extends Model
         'tank_dip_before',
         'tank_dip_after',
         'delivery_variance',
+        'truck_reg',
         'notes',
         'entered_by',
     ];

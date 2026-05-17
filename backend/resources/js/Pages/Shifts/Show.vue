@@ -199,6 +199,8 @@ const zAmountB = ref(0);
 const zAmountD = ref(0);
 
 // ── Shortage Calculation ──────────────────────────────────────────────────────
+const selectedShortageRow = ref(null);
+
 const dipForm = useForm({
     tank_id:          '',
     dip_type:         'closing',
@@ -243,6 +245,23 @@ const shortageRows = computed(() => {
             const totalDip  = dipStock + dipStock2;
             const shortage  = totalDip < closing ? closing - totalDip : 0;
             const excess    = totalDip > closing ? totalDip - closing : 0;
+            const price     = getCurrentPrice(tank.product_id);
+
+            // Previous closing dip (opening dip stock reference)
+            const openingDipStock = Number(tank.last_dip_stock ?? 0) + Number(linked?.last_dip_stock ?? 0);
+
+            // Purchase value in KES
+            const purchaseShs = purchase * price;
+
+            // Truck reg from any delivery for this tank
+            const tankDeliveryRecords = (props.shift.deliveries ?? [])
+                .filter(d => d.tank_id == tank.id || (linked && d.tank_id == linked.id));
+            const truckReg = tankDeliveryRecords.map(d => d.truck_reg).filter(Boolean).join(', ');
+
+            // Cumulative variance % from locked DSR line items
+            const lineItem = props.shift.daily_sales_record?.line_items
+                ?.find(li => li.product_id === tank.product_id);
+            const cumulativeVariancePct = lineItem?.cumulative_variance_pct ?? null;
 
             // Nozzle breakdown for this tank
             const nozzleBreakdown = (props.station?.pump_nozzles ?? [])
@@ -256,8 +275,8 @@ const shortageRows = computed(() => {
                 tank, linked, opening, purchase, pumpTest, subTotal,
                 sales, closing, dipStock, dipStock2, totalDip,
                 shortage, excess, variance: totalDip - closing,
-                nozzleBreakdown,
-                price: getCurrentPrice(tank.product_id),
+                nozzleBreakdown, price,
+                openingDipStock, purchaseShs, truckReg, cumulativeVariancePct,
             };
         });
 });
@@ -786,15 +805,65 @@ function generateDsr() {
 
                     <!-- ── Shortage Calculation ──────────────────────────── -->
                     <div v-show="activeTab === 'shortage'">
-                        <!-- Per-tank shortage section -->
-                        <div v-for="row in shortageRows" :key="row.tank.id" class="mb-6 border rounded overflow-hidden">
-                            <!-- Tank header -->
+                        <!-- Tank list -->
+                        <div class="border rounded overflow-hidden mb-4">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="bg-gray-700 text-white text-xs uppercase">
+                                        <th class="px-4 py-2 text-left">Tank</th>
+                                        <th class="px-4 py-2 text-left">Product</th>
+                                        <th class="px-4 py-2 text-right">Opening Stock</th>
+                                        <th class="px-4 py-2 text-right">Purchase</th>
+                                        <th class="px-4 py-2 text-right">Sales</th>
+                                        <th class="px-4 py-2 text-right">Closing (Calc.)</th>
+                                        <th class="px-4 py-2 text-right">Dip Stock</th>
+                                        <th class="px-4 py-2 text-right">Variance Ltrs</th>
+                                        <th class="px-4 py-2 text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="row in shortageRows" :key="row.tank.id"
+                                        @click="selectedShortageRow = selectedShortageRow?.tank.id === row.tank.id ? null : row"
+                                        class="border-t border-gray-100 cursor-pointer transition-colors"
+                                        :class="selectedShortageRow?.tank.id === row.tank.id
+                                            ? 'bg-blue-50 hover:bg-blue-100'
+                                            : 'hover:bg-gray-50'">
+                                        <td class="px-4 py-2 font-medium text-gray-800">
+                                            {{ row.tank.tank_name }}<span v-if="row.linked" class="text-gray-400"> + {{ row.linked.tank_name }}</span>
+                                        </td>
+                                        <td class="px-4 py-2 text-gray-600">{{ row.tank.product?.product_name ?? '—' }}</td>
+                                        <td class="px-4 py-2 text-right font-mono">{{ fmt(row.opening, 3) }}</td>
+                                        <td class="px-4 py-2 text-right font-mono text-blue-600">{{ fmt(row.purchase, 3) }}</td>
+                                        <td class="px-4 py-2 text-right font-mono text-orange-600">{{ fmt(row.sales, 3) }}</td>
+                                        <td class="px-4 py-2 text-right font-mono">{{ fmt(row.closing, 3) }}</td>
+                                        <td class="px-4 py-2 text-right font-mono">{{ fmt(row.totalDip, 3) }}</td>
+                                        <td class="px-4 py-2 text-right font-mono font-semibold"
+                                            :class="row.variance < 0 ? 'text-red-600' : row.variance > 0 ? 'text-green-600' : 'text-gray-400'">
+                                            {{ row.variance >= 0 ? '+' : '' }}{{ fmt(row.variance, 3) }}
+                                        </td>
+                                        <td class="px-4 py-2 text-center">
+                                            <span v-if="row.shortage > 0" class="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">Short</span>
+                                            <span v-else-if="row.excess > 0" class="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">Excess</span>
+                                            <span v-else class="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">OK</span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Detail view for selected tank -->
+                        <div v-if="selectedShortageRow" class="border rounded overflow-hidden mb-4">
+                            <!-- Detail header with close button -->
                             <div class="bg-gray-700 text-white px-4 py-2 flex items-center justify-between text-sm font-semibold">
-                                <span>{{ row.tank.product?.product_name ?? row.tank.tank_name }}</span>
-                                <span class="text-xs font-normal opacity-75">
-                                    {{ row.tank.tank_name }}
-                                    <span v-if="row.linked"> + {{ row.linked.tank_name }}</span>
-                                </span>
+                                <span>{{ selectedShortageRow.tank.product?.product_name ?? selectedShortageRow.tank.tank_name }}</span>
+                                <div class="flex items-center gap-4 text-xs font-normal opacity-90">
+                                    <span>{{ selectedShortageRow.tank.tank_name }}<span v-if="selectedShortageRow.linked"> + {{ selectedShortageRow.linked.tank_name }}</span></span>
+                                    <span>Price: KES {{ fmt(selectedShortageRow.price, 4) }}/L</span>
+                                    <span v-if="selectedShortageRow.truckReg" class="bg-yellow-500 text-gray-900 px-2 py-0.5 rounded font-semibold">
+                                        Truck: {{ selectedShortageRow.truckReg }}
+                                    </span>
+                                    <button @click="selectedShortageRow = null" class="ml-2 text-white opacity-70 hover:opacity-100 text-lg leading-none">&times;</button>
+                                </div>
                             </div>
 
                             <div class="flex">
@@ -810,70 +879,94 @@ function generateDsr() {
                                         </thead>
                                         <tbody class="text-sm divide-y divide-gray-100">
                                             <tr class="hover:bg-gray-50">
-                                                <td class="px-3 py-1.5 text-gray-600">Opening Stock</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.opening, 3) }}</td>
-                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(row.opening * row.price) }}</td>
+                                                <td class="px-3 py-1.5 text-gray-600">Opening Dip Stock</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.openingDipStock, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(selectedShortageRow.openingDipStock * selectedShortageRow.price) }}</td>
                                             </tr>
                                             <tr class="hover:bg-gray-50">
-                                                <td class="px-3 py-1.5 text-gray-600">Purchase (Delivery)</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.purchase, 3) }}</td>
-                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(row.purchase * row.price) }}</td>
+                                                <td class="px-3 py-1.5 text-gray-600">Opening Stock</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.opening, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(selectedShortageRow.opening * selectedShortageRow.price) }}</td>
                                             </tr>
-                                            <tr v-if="row.pumpTest > 0" class="hover:bg-gray-50">
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="px-3 py-1.5 text-gray-600">
+                                                    Purchase (Delivery)
+                                                    <span v-if="selectedShortageRow.purchaseShs > 0" class="text-xs text-gray-400 ml-1">= KES {{ fmt2(selectedShortageRow.purchaseShs) }}</span>
+                                                </td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.purchase, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(selectedShortageRow.purchase * selectedShortageRow.price) }}</td>
+                                            </tr>
+                                            <tr v-if="selectedShortageRow.pumpTest > 0" class="hover:bg-gray-50">
                                                 <td class="px-3 py-1.5 text-gray-600">Less: Pump Test</td>
-                                                <td class="px-3 py-1.5 text-right font-mono text-orange-600">({{ fmt(row.pumpTest, 3) }})</td>
-                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">({{ fmt2(row.pumpTest * row.price) }})</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-orange-600">({{ fmt(selectedShortageRow.pumpTest, 3) }})</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">({{ fmt2(selectedShortageRow.pumpTest * selectedShortageRow.price) }})</td>
                                             </tr>
                                             <tr class="bg-blue-50 font-semibold">
                                                 <td class="px-3 py-1.5">Sub Total</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.subTotal, 3) }}</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt2(row.subTotal * row.price) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.subTotal, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt2(selectedShortageRow.subTotal * selectedShortageRow.price) }}</td>
                                             </tr>
                                             <tr class="hover:bg-gray-50">
                                                 <td class="px-3 py-1.5 text-gray-600">Less: Sales</td>
-                                                <td class="px-3 py-1.5 text-right font-mono text-red-600">({{ fmt(row.sales, 3) }})</td>
-                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">({{ fmt2(row.sales * row.price) }})</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-red-600">({{ fmt(selectedShortageRow.sales, 3) }})</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">({{ fmt2(selectedShortageRow.sales * selectedShortageRow.price) }})</td>
                                             </tr>
                                             <tr class="bg-blue-50 font-semibold">
                                                 <td class="px-3 py-1.5">Closing Stock (Calc.)</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.closing, 3) }}</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt2(row.closing * row.price) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.closing, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt2(selectedShortageRow.closing * selectedShortageRow.price) }}</td>
                                             </tr>
-                                            <!-- Dip readings -->
                                             <tr class="hover:bg-gray-50">
                                                 <td class="px-3 py-1.5 text-gray-600">
-                                                    Dip Stock 1
-                                                    <span class="text-xs text-gray-400">({{ row.tank.tank_name }})</span>
+                                                    Dip Stock
+                                                    <span class="text-xs text-gray-400">({{ selectedShortageRow.tank.tank_name }})</span>
                                                 </td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.dipStock, 3) }}</td>
-                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(row.dipStock * row.price) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.dipStock, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(selectedShortageRow.dipStock * selectedShortageRow.price) }}</td>
                                             </tr>
-                                            <tr v-if="row.linked" class="hover:bg-gray-50">
+                                            <tr v-if="selectedShortageRow.linked" class="hover:bg-gray-50">
                                                 <td class="px-3 py-1.5 text-gray-600">
                                                     Dip Stock 2
-                                                    <span class="text-xs text-gray-400">({{ row.linked.tank_name }})</span>
+                                                    <span class="text-xs text-gray-400">({{ selectedShortageRow.linked.tank_name }})</span>
                                                 </td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.dipStock2, 3) }}</td>
-                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(row.dipStock2 * row.price) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.dipStock2, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(selectedShortageRow.dipStock2 * selectedShortageRow.price) }}</td>
                                             </tr>
-                                            <tr v-if="row.linked" class="bg-gray-50 font-semibold">
+                                            <tr v-if="selectedShortageRow.linked" class="bg-gray-50 font-semibold">
                                                 <td class="px-3 py-1.5">Total Dip Stock</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(row.totalDip, 3) }}</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt2(row.totalDip * row.price) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.totalDip, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt2(selectedShortageRow.totalDip * selectedShortageRow.price) }}</td>
                                             </tr>
-                                            <!-- Variance -->
-                                            <tr v-if="row.shortage > 0" class="bg-red-50">
+                                            <tr v-if="selectedShortageRow.shortage > 0" class="bg-red-50">
                                                 <td class="px-3 py-1.5 font-semibold text-red-700">Shortage</td>
-                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-red-700">{{ fmt(row.shortage, 3) }}</td>
-                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-red-700">{{ fmt2(row.shortage * row.price) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-red-700">{{ fmt(selectedShortageRow.shortage, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-red-700">{{ fmt2(selectedShortageRow.shortage * selectedShortageRow.price) }}</td>
                                             </tr>
-                                            <tr v-if="row.excess > 0" class="bg-green-50">
+                                            <tr v-if="selectedShortageRow.excess > 0" class="bg-green-50">
                                                 <td class="px-3 py-1.5 font-semibold text-green-700">Excess</td>
-                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-green-700">{{ fmt(row.excess, 3) }}</td>
-                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-green-700">{{ fmt2(row.excess * row.price) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-green-700">{{ fmt(selectedShortageRow.excess, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-green-700">{{ fmt2(selectedShortageRow.excess * selectedShortageRow.price) }}</td>
                                             </tr>
-                                            <tr v-if="row.shortage === 0 && row.excess === 0" class="bg-green-50">
+                                            <tr v-if="selectedShortageRow.shortage === 0 && selectedShortageRow.excess === 0" class="bg-green-50">
                                                 <td class="px-3 py-1.5 text-green-700 font-semibold" colspan="3">No Variance</td>
+                                            </tr>
+                                            <tr class="border-t-2 border-gray-300">
+                                                <td class="px-3 py-1.5 font-semibold text-gray-700">Variance Ltrs</td>
+                                                <td class="px-3 py-1.5 text-right font-mono font-semibold"
+                                                    :class="selectedShortageRow.variance < 0 ? 'text-red-600' : selectedShortageRow.variance > 0 ? 'text-green-600' : 'text-gray-500'">
+                                                    {{ selectedShortageRow.variance >= 0 ? '+' : '' }}{{ fmt(selectedShortageRow.variance, 3) }}
+                                                </td>
+                                                <td class="px-3 py-1.5 text-right font-mono font-semibold"
+                                                    :class="selectedShortageRow.variance < 0 ? 'text-red-600' : selectedShortageRow.variance > 0 ? 'text-green-600' : 'text-gray-500'">
+                                                    {{ selectedShortageRow.variance >= 0 ? '+' : '' }}{{ fmt2(selectedShortageRow.variance * selectedShortageRow.price) }}
+                                                </td>
+                                            </tr>
+                                            <tr v-if="selectedShortageRow.cumulativeVariancePct !== null" class="bg-gray-50">
+                                                <td class="px-3 py-1.5 text-gray-500 text-xs" colspan="2">Cumulative Variance %</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-xs font-semibold"
+                                                    :class="selectedShortageRow.cumulativeVariancePct < 0 ? 'text-red-600' : 'text-green-600'">
+                                                    {{ Number(selectedShortageRow.cumulativeVariancePct).toFixed(2) }}%
+                                                </td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -881,17 +974,19 @@ function generateDsr() {
 
                                 <!-- Right: Nozzle breakdown panel -->
                                 <div class="w-48 border-l bg-gray-50 flex-shrink-0">
-                                    <div class="px-3 py-2 bg-gray-100 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                                        Nozzle Sales
-                                    </div>
-                                    <div v-for="nz in row.nozzleBreakdown" :key="nz.name"
+                                    <div class="px-3 py-2 bg-gray-100 text-xs font-semibold text-gray-600 uppercase tracking-wide">Pump Sales</div>
+                                    <div v-for="nz in selectedShortageRow.nozzleBreakdown" :key="nz.name"
                                         class="flex justify-between px-3 py-1.5 border-b border-gray-200 text-xs">
                                         <span class="text-gray-600 truncate mr-1">{{ nz.name }}</span>
                                         <span class="font-mono font-medium">{{ fmt(nz.sales, 3) }}</span>
                                     </div>
                                     <div class="flex justify-between px-3 py-2 bg-gray-100 text-xs font-bold border-t">
-                                        <span>Total</span>
-                                        <span class="font-mono">{{ fmt(row.sales, 3) }}</span>
+                                        <span>Total Sales</span>
+                                        <span class="font-mono">{{ fmt(selectedShortageRow.sales, 3) }}</span>
+                                    </div>
+                                    <div class="flex justify-between px-3 py-1.5 bg-gray-50 text-xs border-t text-gray-500">
+                                        <span>Value (KES)</span>
+                                        <span class="font-mono">{{ fmt2(selectedShortageRow.sales * selectedShortageRow.price) }}</span>
                                     </div>
                                 </div>
                             </div>
