@@ -15,14 +15,22 @@ trait BelongsToStation
 {
     public function resolveRouteBinding($value, $field = null): ?Model
     {
-        $stationId = auth()->user()?->station_id;
+        $user = auth()->user();
 
-        if (! $stationId) {
-            abort(403);
+        // Non-owner: scope to their directly assigned station.
+        if ($user?->station_id) {
+            return $this->where($field ?? $this->getRouteKeyName(), $value)
+                ->where('station_id', $user->station_id)
+                ->firstOrFail();
         }
 
-        return $this->where($field ?? $this->getRouteKeyName(), $value)
-            ->where('station_id', $stationId)
-            ->firstOrFail();
+        // Owner: use the station resolved and ownership-verified by ResolveStation middleware.
+        if ($user?->isOwner() && $user->relationLoaded('station') && $user->station) {
+            return $this->where($field ?? $this->getRouteKeyName(), $value)
+                ->where('station_id', $user->station->id)
+                ->firstOrFail();
+        }
+
+        abort(403);
     }
 }

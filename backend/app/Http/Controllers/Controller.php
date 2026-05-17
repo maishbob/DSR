@@ -11,8 +11,14 @@ abstract class Controller
         $user = auth()->user();
         $stationId = $model->getAttribute($stationFk);
 
-        if ($stationId !== $user->station_id && !$user->isOwner()) {
-            abort(403);
+        if ($stationId === $user->station_id) {
+            return;
         }
+
+        if ($user->isOwner() && $user->ownsStation($stationId)) {
+            return;
+        }
+
+        abort(403);
     }
 }

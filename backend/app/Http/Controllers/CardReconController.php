@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CardRecon;
 use App\Models\CardReconLine;
+use App\Models\DailySalesRecord;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -68,6 +69,15 @@ class CardReconController extends Controller
     // ── Lines ────────────────────────────────────────────────
     public function storeLine(Request $request, CardRecon $cardRecon)
     {
+        abort_if(
+            DailySalesRecord::where('station_id', $cardRecon->station_id)
+                ->whereDate('shift_date', $cardRecon->recon_date)
+                ->where('locked', true)
+                ->exists(),
+            403,
+            'Cannot modify a card recon for a locked DSR period.'
+        );
+
         $validated = $request->validate([
             'trans_date' => 'required|date',
             'ref'        => 'nullable|string|max:50',
@@ -83,6 +93,16 @@ class CardReconController extends Controller
 
     public function destroyLine(CardReconLine $cardReconLine)
     {
+        $recon = $cardReconLine->cardRecon;
+        abort_if(
+            DailySalesRecord::where('station_id', $recon->station_id)
+                ->whereDate('shift_date', $recon->recon_date)
+                ->where('locked', true)
+                ->exists(),
+            403,
+            'Cannot modify a card recon for a locked DSR period.'
+        );
+
         $cardReconLine->delete();
         return back()->with('success', 'Transaction removed.');
     }

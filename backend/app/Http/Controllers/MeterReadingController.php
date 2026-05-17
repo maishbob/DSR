@@ -36,6 +36,18 @@ class MeterReadingController extends Controller
 
         [$openingMech, $openingElec, $openingShs] = $this->deriveOpenings($nozzle, $shift);
 
+        if ((float)$validated['closing_electrical'] < $openingElec) {
+            return back()->withErrors([
+                'closing_electrical' => "Closing reading ({$validated['closing_electrical']}) cannot be less than opening reading ({$openingElec}).",
+            ]);
+        }
+
+        if ((float)$validated['closing_mechanical'] < $openingMech) {
+            return back()->withErrors([
+                'closing_mechanical' => "Closing reading ({$validated['closing_mechanical']}) cannot be less than opening reading ({$openingMech}).",
+            ]);
+        }
+
         $reading = MeterReading::firstOrCreate(
             ['shift_id' => $shift->id, 'nozzle_id' => $nozzle->id],
             [

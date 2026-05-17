@@ -6,6 +6,7 @@ use App\Models\CreditSale;
 use App\Models\DailySalesRecord;
 use App\Models\DsrLineItem;
 use App\Models\Expense;
+use App\Models\FinancialTransaction;
 use App\Models\MeterReading;
 use App\Models\Payment;
 use App\Models\Product;
@@ -48,8 +49,10 @@ class DsrService
             $lineItems       = [];
             $productBreakdown = [];
 
+            $allProductData = $this->engine->reconcileAllProducts($shift, $products);
+
             foreach ($products as $product) {
-                $data = $this->engine->reconcileShiftProduct($shift, $product);
+                $data = $allProductData[$product->id];
 
                 $totalLitres     += $data['litres_sold'];
                 $totalRevenue    += $data['revenue'];
@@ -192,6 +195,56 @@ class DsrService
             }
 
             return $dsr->fresh();
+        });
+    }
+
+    /**
+     * Reopen a locked DSR so corrections can be made before re-approval.
+     *
+     * Reverses approveDsr: unlocks all financial records, resets the shift to
+     * open, clears approval fields, and removes the fuel-sale ledger entries
+     * (they will be recreated when the DSR is re-approved).
+     */
+    public function reopenDsr(DailySalesRecord $dsr, string $reason): void
+    {
+        if (!$dsr->locked) {
+            throw new \RuntimeException('DSR is not locked.');
+        }
+
+        DB::transaction(function () use ($dsr) {
+            $shift = $dsr->shift;
+
+            // Remove fuel-sale ledger entries — recreated on next approval
+            FinancialTransaction::where('shift_id', $shift->id)
+                ->where('type', 'fuel_sale')
+                ->delete();
+
+            // Unlock all financial records for this shift
+            MeterReading::where('shift_id', $shift->id)->update(['is_locked' => false]);
+            TankDip::where('shift_id', $shift->id)->update(['is_locked' => false]);
+            CreditSale::where('shift_id', $shift->id)->update(['is_locked' => false]);
+            Payment::where('station_id', $shift->station_id)
+                ->whereDate('payment_date', $shift->shift_date)
+                ->update(['is_locked' => false]);
+
+            // Reset DSR approval fields
+            $dsr->update([
+                'locked'          => false,
+                'approved_at'     => null,
+                'approved_by'     => null,
+                'variance_status' => null,
+                'override_reason' => null,
+                'override_by'     => null,
+                'override_at'     => null,
+                'verified_by'     => null,
+            ]);
+
+            // Reset shift back to open so entries can be edited and DSR regenerated
+            $shift->update([
+                'status'    => 'open',
+                'closed_at' => null,
+                'closed_by' => null,
+            ]);
         });
     }
 

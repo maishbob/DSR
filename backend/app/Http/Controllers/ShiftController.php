@@ -75,7 +75,7 @@ class ShiftController extends Controller
 
     public function show(Shift $shift): Response
     {
-        $this->authorizeStation($shift);
+        $this->checkShiftAccess($shift);
 
         $shift->load([
             'meterReadings.nozzle.product',
@@ -117,7 +117,7 @@ class ShiftController extends Controller
      */
     public function updateCash(Request $request, Shift $shift)
     {
-        $this->authorizeStation($shift);
+        $this->checkShiftAccess($shift);
 
         if ($shift->isLocked()) {
             return back()->withErrors(['cash' => 'Shift is locked.']);
@@ -148,7 +148,7 @@ class ShiftController extends Controller
 
     public function generateDsr(Request $request, Shift $shift)
     {
-        $this->authorizeStation($shift);
+        $this->checkShiftAccess($shift);
 
         $dsr = $this->dsrService->generateForShift($shift);
 
@@ -158,12 +158,19 @@ class ShiftController extends Controller
 
     // -------------------------------------------------------------------------
 
-    private function authorizeStation(Shift $shift): void
+    protected function checkShiftAccess(Shift $shift): void
     {
         $user = auth()->user();
-        if ($shift->station_id !== $user->station_id && !$user->isOwner()) {
-            abort(403);
+
+        if ($shift->station_id === $user->station_id) {
+            return;
         }
+
+        if ($user->isOwner() && $user->ownsStation($shift->station_id)) {
+            return;
+        }
+
+        abort(403);
     }
 
     private function logCashSubmission(Shift $shift, array $recon): void

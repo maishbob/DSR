@@ -29,10 +29,10 @@ class AdminController extends Controller
     public function storeOwner(Request $request)
     {
         $request->validate([
-            'name'  => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-            'phone' => 'nullable|string|max:50',
-            'password' => 'required|string|min:6',
+            'name'     => 'required|string|max:255',
+            'email'    => 'required|email|unique:users,email',
+            'phone'    => 'nullable|string|max:50',
+            'password' => 'required|string|min:8',
         ]);
 
         DB::transaction(function () use ($request) {
@@ -82,8 +82,10 @@ class AdminController extends Controller
 
     public function resetPassword(Request $request, User $user)
     {
+        abort_if($user->isSuperAdmin(), 403, 'Cannot reset a super admin password.');
+
         $request->validate([
-            'password' => 'required|string|min:6',
+            'password' => 'required|string|min:8',
         ]);
 
         $user->update([

@@ -6,6 +6,7 @@ use App\Models\Shift;
 use App\Models\TankDip;
 use App\Services\AuditService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class TankDipController extends Controller
 {
@@ -16,7 +17,7 @@ class TankDipController extends Controller
         if ($shift->isLocked()) abort(403, 'Shift is locked.');
 
         $validated = $request->validate([
-            'tank_id'    => 'required|exists:tanks,id',
+            'tank_id'    => ['required', Rule::exists('tanks', 'id')->where('station_id', $shift->station_id)],
             'dip_type'   => 'required|in:opening,closing',
             'dip_volume' => 'required|numeric|min:0',
         ]);

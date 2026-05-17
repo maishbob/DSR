@@ -8,6 +8,7 @@ use App\Models\Shift;
 use App\Models\StockTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class OilSaleController extends Controller
 {
@@ -16,7 +17,7 @@ class OilSaleController extends Controller
         abort_if($shift->isLocked(), 403, 'Shift is locked.');
 
         $validated = $request->validate([
-            'shop_product_id' => 'required|exists:shop_products,id',
+            'shop_product_id' => ['required', Rule::exists('shop_products', 'id')->where('station_id', $shift->station_id)],
             'opening_stock'   => 'required|numeric|min:0',
             'quantity'        => 'required|numeric|min:0.001',
             'unit_price'      => 'required|numeric|min:0',
@@ -67,9 +68,19 @@ class OilSaleController extends Controller
         abort_if($oilSale->shift->isLocked(), 403, 'Shift is locked.');
 
         DB::transaction(function () use ($oilSale) {
-            // Reverse the stock ISS — add back to forecourt stock
             $product = ShopProduct::find($oilSale->shop_product_id);
-            $product->increment('forecourt_stock', (float) $oilSale->quantity);
+            $qty = (float) $oilSale->quantity;
+            $openingStock = (float) $oilSale->opening_stock;
+
+            // Mirror the forward deduction: if qty fit within forecourt, reverse
+            // back to forecourt; otherwise split the reversal across both buckets.
+            if ($qty <= $openingStock) {
+                $product->increment('forecourt_stock', $qty);
+            } else {
+                $product->forecourt_stock = (float) $product->forecourt_stock + $openingStock;
+                $product->store_stock = (float) $product->store_stock + ($qty - $openingStock);
+                $product->save();
+            }
 
             // Remove the corresponding ISS transaction for this shift
             StockTransaction::where('shop_product_id', $oilSale->shop_product_id)

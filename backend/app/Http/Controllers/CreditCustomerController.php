@@ -8,6 +8,7 @@ use App\Models\Payment;
 use App\Models\Shift;
 use App\Services\AuditService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class CreditCustomerController extends Controller
@@ -65,16 +66,36 @@ class CreditCustomerController extends Controller
 
     public function show(Request $request, CreditCustomer $creditCustomer)
     {
-        $creditCustomer->load([
-            'creditSales.product',
-            'creditSales.shift.dailySalesRecord',
-            'payments',
-        ]);
-
         $fromDate = $request->input('from_date');
         $toDate   = $request->input('to_date');
 
-        // Build unified transaction list
+        // Compute brought-forward via DB aggregation — avoids loading full history
+        $broughtForward = (float)($creditCustomer->initial_opening_balance ?? 0);
+        if ($fromDate) {
+            $salesBefore = $creditCustomer->creditSales()
+                ->whereHas('shift', fn($q) => $q->where('shift_date', '<', $fromDate))
+                ->sum('total_value');
+            $paymentsBefore = $creditCustomer->payments()
+                ->where('payment_date', '<', $fromDate)
+                ->sum('amount');
+            $broughtForward += (float)$salesBefore - (float)$paymentsBefore;
+        }
+
+        // Load only in-range records, with nested relations in one pass
+        $creditCustomer->load([
+            'creditSales' => function ($q) use ($fromDate, $toDate) {
+                $q->with(['product', 'shift.dailySalesRecord'])
+                  ->when($fromDate || $toDate, fn($q) => $q->whereHas('shift', function ($sq) use ($fromDate, $toDate) {
+                      $sq->when($fromDate, fn($sq) => $sq->where('shift_date', '>=', $fromDate))
+                         ->when($toDate,   fn($sq) => $sq->where('shift_date', '<=', $toDate));
+                  }));
+            },
+            'payments' => function ($q) use ($fromDate, $toDate) {
+                $q->when($fromDate, fn($q) => $q->where('payment_date', '>=', $fromDate))
+                  ->when($toDate,   fn($q) => $q->where('payment_date', '<=', $toDate));
+            },
+        ]);
+
         $sales = $creditCustomer->creditSales->map(fn($s) => [
             'id'          => 'sale_' . $s->id,
             'date'        => $s->shift?->shift_date ?? substr($s->created_at, 0, 10),
@@ -102,22 +123,7 @@ class CreditCustomerController extends Controller
             'credit'      => (float)$p->amount,
         ]);
 
-        $all = $sales->concat($payments)->sortBy('date')->values();
-
-        // Compute brought-forward balance before from_date
-        $broughtForward = (float)($creditCustomer->initial_opening_balance ?? 0);
-        if ($fromDate) {
-            foreach ($all as $tx) {
-                if ($tx['date'] < $fromDate) {
-                    $broughtForward += ($tx['debit'] ?? 0) - ($tx['credit'] ?? 0);
-                }
-            }
-            $transactions = $all->filter(
-                fn($tx) => $tx['date'] >= $fromDate && (!$toDate || $tx['date'] <= $toDate)
-            )->values();
-        } else {
-            $transactions = $all;
-        }
+        $transactions = $sales->concat($payments)->sortBy('date')->values();
 
         return Inertia::render('Credits/Show', [
             'customer'        => $creditCustomer,
@@ -157,10 +163,12 @@ class CreditCustomerController extends Controller
     // Record a credit sale
     public function storeSale(Request $request)
     {
+        $station = $request->user()->station;
+
         $validated = $request->validate([
-            'credit_customer_id' => 'required|exists:credit_customers,id',
-            'product_id'         => 'required|exists:products,id',
-            'shift_id'           => 'required|exists:shifts,id',
+            'credit_customer_id' => ['required', Rule::exists('credit_customers', 'id')->where('station_id', $station->id)],
+            'product_id'         => ['required', Rule::exists('products', 'id')->where('station_id', $station->id)],
+            'shift_id'           => ['required', Rule::exists('shifts', 'id')->where('station_id', $station->id)],
             'type'               => 'nullable|in:fuel,oil,other',
             'quantity'           => 'required|numeric|min:0.001',
             'price_applied'      => 'required|numeric|min:0',

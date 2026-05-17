@@ -9,7 +9,7 @@ class TankDip extends Model
 {
     public function resolveRouteBinding($value, $field = null): ?Model
     {
-        $stationId = auth()->user()?->station_id;
+        $stationId = auth()->user()?->effectiveStationId();
         if (! $stationId) {
             abort(403);
         }

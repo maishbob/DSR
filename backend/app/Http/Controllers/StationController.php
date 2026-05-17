@@ -9,6 +9,7 @@ use App\Models\ShopProduct;
 use App\Models\Station;
 use App\Models\Tank;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class StationController extends Controller
@@ -82,7 +83,7 @@ class StationController extends Controller
         $validated = $request->validate([
             'tank_name'          => 'required|string|max:100',
             'tank_capacity'      => 'required|numeric|min:1',
-            'linked_tank_id'     => 'nullable|exists:tanks,id',
+            'linked_tank_id'     => ['nullable', Rule::exists('tanks', 'id')->where('station_id', $tank->station_id)],
             'is_active'          => 'boolean',
             'is_complex'         => 'boolean',
             'last_closing_stock' => 'nullable|numeric|min:0',
@@ -176,14 +177,17 @@ class StationController extends Controller
     // Prices
     public function storePrice(Request $request)
     {
+        $station = $request->user()->station;
+
         $validated = $request->validate([
-            'product_id'     => 'required|exists:products,id',
+            'product_id'     => ['required', Rule::exists('products', 'id')->where('station_id', $station->id)],
             'price_per_litre'=> 'required|numeric|min:0.001',
             'effective_from' => 'required|date',
         ]);
 
-        // Close the previous active price
+        // Close the previous active price (scoped to station via product)
         PriceHistory::where('product_id', $validated['product_id'])
+            ->whereHas('product', fn($q) => $q->where('station_id', $station->id))
             ->whereNull('effective_to')
             ->update(['effective_to' => now()->toDateString()]);
 

@@ -19,7 +19,12 @@ class AuditLogController extends Controller
             ->orderByDesc('created_at');
 
         if (!$user->isSuperAdmin()) {
-            $query->where('station_id', $user->station_id);
+            if ($user->isOwner()) {
+                $stationIds = $user->ownedAccount?->stations()->pluck('id') ?? collect();
+                $query->whereIn('station_id', $stationIds);
+            } else {
+                $query->where('station_id', $user->station_id);
+            }
         }
 
         if ($from = $request->get('from')) {
@@ -47,16 +52,28 @@ class AuditLogController extends Controller
 
         $logs = $query->paginate(50)->withQueryString();
 
+        $scopeToStation = function ($q) use ($user) {
+            if ($user->isOwner()) {
+                $stationIds = $user->ownedAccount?->stations()->pluck('id') ?? collect();
+                $q->whereIn('station_id', $stationIds);
+            } else {
+                $q->where('station_id', $user->station_id);
+            }
+        };
+
         $actions = AuditLog::query()
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('station_id', $user->station_id))
+            ->when(!$user->isSuperAdmin(), $scopeToStation)
             ->select('action')->distinct()->orderBy('action')->pluck('action');
 
         $modelTypes = AuditLog::query()
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('station_id', $user->station_id))
+            ->when(!$user->isSuperAdmin(), $scopeToStation)
             ->select('model_type')->distinct()->orderBy('model_type')->pluck('model_type');
 
         $users = User::query()
-            ->when(!$user->isSuperAdmin(), fn($q) => $q->where('station_id', $user->station_id))
+            ->when(!$user->isSuperAdmin(), fn($q) => $user->isOwner()
+                ? $q->whereIn('station_id', $user->ownedAccount?->stations()->pluck('id') ?? collect())
+                : $q->where('station_id', $user->station_id)
+            )
             ->orderBy('name')
             ->get(['id', 'name', 'role']);
 

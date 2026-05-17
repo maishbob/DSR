@@ -9,7 +9,7 @@ class CreditSale extends Model
 {
     public function resolveRouteBinding($value, $field = null): ?Model
     {
-        $stationId = auth()->user()?->station_id;
+        $stationId = auth()->user()?->effectiveStationId();
         if (! $stationId) {
             abort(403);
         }
@@ -47,7 +47,7 @@ class CreditSale extends Model
     protected static function booted(): void
     {
         static::saving(function (CreditSale $sale) {
-            $service = new \App\Services\CreditSaleService();
+            $service = app(\App\Services\CreditSaleService::class);
 
             // Compute total value
             $sale->total_value = round((float) $sale->quantity * (float) $sale->price_applied, 2);

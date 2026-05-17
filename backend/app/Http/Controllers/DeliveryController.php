@@ -6,6 +6,7 @@ use App\Models\Delivery;
 use App\Models\Shift;
 use App\Services\AuditService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class DeliveryController extends Controller
@@ -28,10 +29,12 @@ class DeliveryController extends Controller
 
     public function store(Request $request)
     {
+        $station = $request->user()->station;
+
         $validated = $request->validate([
-            'product_id'        => 'required|exists:products,id',
-            'tank_id'           => 'required|exists:tanks,id',
-            'shift_id'          => 'nullable|exists:shifts,id',
+            'product_id'        => ['required', Rule::exists('products', 'id')->where('station_id', $station->id)],
+            'tank_id'           => ['required', Rule::exists('tanks', 'id')->where('station_id', $station->id)],
+            'shift_id'          => ['nullable', Rule::exists('shifts', 'id')->where('station_id', $station->id)],
             'delivery_date'     => 'required|date',
             'supplier_name'     => 'required|string|max:255',
             'waybill_number'    => 'nullable|string|max:100',
@@ -40,8 +43,6 @@ class DeliveryController extends Controller
             'tank_dip_after'    => 'nullable|numeric|min:0',
             'notes'             => 'nullable|string',
         ]);
-
-        $station = $request->user()->station;
 
         if (isset($validated['shift_id'])) {
             $shift = Shift::findOrFail($validated['shift_id']);

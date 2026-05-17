@@ -53,6 +53,21 @@ class User extends Authenticatable
         return $this->role === 'owner';
     }
 
+    public function ownsStation(int $stationId): bool
+    {
+        return $this->ownedAccount?->stations()->where('id', $stationId)->exists() ?? false;
+    }
+
+    /**
+     * Returns the station ID to use for tenant scoping.
+     * Non-owners: their assigned station_id.
+     * Owners: the station resolved by ResolveStation middleware (via setRelation).
+     */
+    public function effectiveStationId(): ?int
+    {
+        return $this->station_id ?? ($this->isOwner() ? $this->station?->id : null);
+    }
+
     public function isSuperAdmin(): bool
     {
         return $this->role === 'super_admin';

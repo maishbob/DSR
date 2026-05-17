@@ -9,7 +9,7 @@ class MeterReading extends Model
 {
     public function resolveRouteBinding($value, $field = null): ?Model
     {
-        $stationId = auth()->user()?->station_id;
+        $stationId = auth()->user()?->effectiveStationId();
         if (! $stationId) {
             abort(403);
         }
@@ -43,7 +43,7 @@ class MeterReading extends Model
         'is_locked'          => 'boolean',
     ];
 
-    protected $appends = ['litres_sold', 'mechanical_sales', 'shs_sold'];
+    protected $appends = ['litres_sold', 'mechanical_sales'];
 
     /**
      * Litres sold — calculated from the electrical (more accurate) meter.
@@ -61,16 +61,6 @@ class MeterReading extends Model
     {
         if ($this->closing_mechanical === null) return null;
         return round((float) $this->closing_mechanical - (float) $this->opening_mechanical, 1);
-    }
-
-    /**
-     * Shs sold — difference of the revenue odometer on the pump.
-     * Independent cross-check against (electronic litres × price).
-     */
-    public function getShsSoldAttribute(): ?float
-    {
-        if ($this->closing_shs === null) return null;
-        return round((float) $this->closing_shs - (float) $this->opening_shs, 2);
     }
 
     public function shift(): BelongsTo
