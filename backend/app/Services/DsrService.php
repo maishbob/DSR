@@ -4,8 +4,6 @@ namespace App\Services;
 
 use App\Models\CreditSale;
 use App\Models\DailySalesRecord;
-use App\Models\DsrLineItem;
-use App\Models\Expense;
 use App\Models\FinancialTransaction;
 use App\Models\MeterReading;
 use App\Models\Payment;
@@ -111,8 +109,8 @@ class DsrService
             $cashRecon = $this->cash->calculate($shift->fresh());
             $dsr->update([
                 'variance_status'  => $varianceStatus,
-                'cash_collected'   => $cashRecon['actual_cash'],
-                'mpesa_collected'  => $cashRecon['mpesa_amount'],
+                'cash_collected'   => $cashRecon['actual_cash'] ?? 0,
+                'mpesa_collected'  => $cashRecon['mpesa_amount'] ?? 0,
                 'total_expenses'   => $cashRecon['cash_expenses'],
                 'total_cash_sales' => $cashRecon['fuel_cash_sales'],
                 'total_oil_sales'  => $cashRecon['oil_cash_sales'],
@@ -155,10 +153,15 @@ class DsrService
         }
 
         return DB::transaction(function () use ($dsr, $userId, $overrideReason, $status) {
-            $shift = $dsr->shift;
+            $lockedDsr = DailySalesRecord::whereKey($dsr->id)->lockForUpdate()->firstOrFail();
+            if ($lockedDsr->locked) {
+                throw new \RuntimeException('DSR is already locked.');
+            }
+
+            $shift = Shift::whereKey($lockedDsr->shift_id)->lockForUpdate()->firstOrFail();
 
             // 1. Lock the DSR
-            $dsr->update([
+            $lockedDsr->update([
                 'approved_at'     => now(),
                 'approved_by'     => $userId,
                 'locked'          => true,
@@ -176,11 +179,7 @@ class DsrService
             MeterReading::where('shift_id', $shift->id)->update(['is_locked' => true]);
             TankDip::where('shift_id', $shift->id)->update(['is_locked' => true]);
             CreditSale::where('shift_id', $shift->id)->update(['is_locked' => true]);
-
-            // Payments aren't shift-linked, so match by station + shift date
-            Payment::where('station_id', $shift->station_id)
-                ->whereDate('payment_date', $shift->shift_date)
-                ->update(['is_locked' => true]);
+            $this->lockPaymentsForShift($shift);
 
             // 4. Write fuel sales to the financial ledger
             $readings = MeterReading::where('shift_id', $shift->id)
@@ -194,7 +193,7 @@ class DsrService
                 $this->ledger->recordFuelSale($reading, $price);
             }
 
-            return $dsr->fresh();
+            return $lockedDsr->fresh();
         });
     }
 
@@ -223,9 +222,7 @@ class DsrService
             MeterReading::where('shift_id', $shift->id)->update(['is_locked' => false]);
             TankDip::where('shift_id', $shift->id)->update(['is_locked' => false]);
             CreditSale::where('shift_id', $shift->id)->update(['is_locked' => false]);
-            Payment::where('station_id', $shift->station_id)
-                ->whereDate('payment_date', $shift->shift_date)
-                ->update(['is_locked' => false]);
+            $this->unlockPaymentsForShift($shift);
 
             // Reset DSR approval fields
             $dsr->update([
@@ -252,5 +249,31 @@ class DsrService
     {
         $rank = ['ok' => 0, 'warning' => 1, 'critical' => 2];
         return ($rank[$a] ?? 0) >= ($rank[$b] ?? 0) ? $a : $b;
+    }
+
+    private function lockPaymentsForShift(Shift $shift): void
+    {
+        Payment::where('station_id', $shift->station_id)
+            ->where(function ($q) use ($shift) {
+                $q->where('shift_id', $shift->id)
+                    ->orWhere(function ($legacy) use ($shift) {
+                        $legacy->whereNull('shift_id')
+                            ->whereDate('payment_date', $shift->shift_date);
+                    });
+            })
+            ->update(['is_locked' => true]);
+    }
+
+    private function unlockPaymentsForShift(Shift $shift): void
+    {
+        Payment::where('station_id', $shift->station_id)
+            ->where(function ($q) use ($shift) {
+                $q->where('shift_id', $shift->id)
+                    ->orWhere(function ($legacy) use ($shift) {
+                        $legacy->whereNull('shift_id')
+                            ->whereDate('payment_date', $shift->shift_date);
+                    });
+            })
+            ->update(['is_locked' => false]);
     }
 }

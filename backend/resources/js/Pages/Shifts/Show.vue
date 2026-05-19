@@ -1,9 +1,9 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ConfirmModal from '@/Components/ConfirmModal.vue';
-import { Head, useForm, Link, router } from '@inertiajs/vue3';
+import { Head, useForm, Link, router, usePage } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
-import { fmt, fmt2, fmtDate as fmtShiftDate } from '@/composables/useFormatters';
+import { fmt, fmt2, fmtDate as fmtShiftDate, fmtReading } from '@/composables/useFormatters';
 
 const props = defineProps({
     shift: Object,
@@ -12,19 +12,32 @@ const props = defineProps({
 });
 
 // ── Tab management ────────────────────────────────────────────────────────────
-const activeTab = ref('pumps');
+// Default to Sales Summary when a DSR has been generated; otherwise land on Pump Readings
+const activeTab = ref(props.shift.daily_sales_record ? 'summary' : 'pumps');
 const tabs = [
-    { key: 'pumps',    label: 'Pump Readings' },
+    { key: 'pumps',    label: 'Pumps' },
     { key: 'oils',     label: 'Oils' },
-    { key: 'shortage', label: 'Shortage Calculation' },
-    { key: 'clients',  label: 'Client Sales' },
+    { key: 'shortage', label: 'Shortage' },
+    { key: 'clients',  label: 'Clients' },
     { key: 'cards',    label: 'Cards' },
     { key: 'pos',      label: 'POS' },
     { key: 'expenses', label: 'Expenses' },
-    { key: 'summary',  label: 'Sales Summary' },
+    { key: 'summary',  label: 'Summary' },
 ];
 
-const isLocked = computed(() => props.shift.status === 'locked');
+const isLocked  = computed(() => props.shift.status === 'locked');
+const page      = usePage();
+const isManager = computed(() => ['owner', 'manager'].includes(page.props.auth.user?.role));
+
+// ── Unlock shift ──────────────────────────────────────────────────────────────
+const showUnlockForm = ref(false);
+const unlockForm     = useForm({ reason: '' });
+
+function submitUnlock() {
+    unlockForm.post(route('shifts.unlock', props.shift.id), {
+        onSuccess: () => { showUnlockForm.value = false; unlockForm.reset(); },
+    });
+}
 
 // ── Confirm Modal ────────────────────────────────────────────────────────────
 const confirmModal = ref({ show: false, title: '', message: '', variant: 'danger', onConfirm: () => {} });
@@ -49,7 +62,7 @@ const tabCounts = computed(() => ({
     cards:    props.shift.card_payments?.length ?? 0,
     pos:      props.shift.pos_transactions?.length ?? 0,
     expenses: props.shift.expenses?.length ?? 0,
-    summary:  0,
+    summary:  null,
 }));
 
 // ── Pump Readings ─────────────────────────────────────────────────────────────
@@ -61,7 +74,20 @@ const meterForm = useForm({
 });
 
 // Selected nozzle's pre-seeded reading (for showing opening values read-only)
-const selectedReading = ref(null);
+const selectedReading  = ref(null);
+const editingNozzleId  = ref(null);
+
+function startEditNozzle(nozzle) {
+    editingNozzleId.value = nozzle.id;
+    meterForm.nozzle_id   = String(nozzle.id);
+    onNozzleSelect();
+}
+
+function cancelEditNozzle() {
+    editingNozzleId.value = null;
+    meterForm.reset();
+    selectedReading.value = null;
+}
 
 // Pre-fill closing fields from existing reading when nozzle selected
 function onNozzleSelect() {
@@ -106,7 +132,7 @@ function onNozzleSelect() {
 
 function submitMeter() {
     meterForm.post(route('meter-readings.store', props.shift.id), {
-        onSuccess: () => { meterForm.reset(); selectedReading.value = null; },
+        onSuccess: () => { meterForm.reset(); selectedReading.value = null; editingNozzleId.value = null; },
     });
 }
 
@@ -118,7 +144,7 @@ function clearMeterReading() {
         onConfirm: () => {
             router.delete(route('meter-readings.destroy', selectedReading.value.id), {
                 preserveScroll: true,
-                onSuccess: () => { meterForm.reset(); selectedReading.value = null; },
+                onSuccess: () => { meterForm.reset(); selectedReading.value = null; editingNozzleId.value = null; },
             });
         },
     });
@@ -234,23 +260,29 @@ const shortageRows = computed(() => {
             const openDip2  = linked ? getDip(linked.id, 'opening')  : null;
             const closeDip2 = linked ? getDip(linked.id, 'closing') : null;
 
-            const opening   = Number(openDip?.dip_volume ?? 0) + Number(openDip2?.dip_volume ?? 0);
+            // Meter-based opening: previous shift's calculated closing stock
+            const openingMeter    = Number(tank.last_closing_stock ?? 0) + Number(linked?.last_closing_stock ?? 0);
+            // Dip-based opening: previous shift's closing dip (for variance calculation)
+            const openingDipStock = Number(tank.last_dip_stock ?? 0) + Number(linked?.last_dip_stock ?? 0);
+
             const purchase  = tankDeliveries(tank.id) + (linked ? tankDeliveries(linked.id) : 0);
             const pumpTest  = Number(closeDip?.pump_test_volume ?? openDip?.pump_test_volume ?? 0);
-            const subTotal  = opening + purchase - pumpTest;
+            const subTotal  = openingMeter + purchase - pumpTest;
             const sales     = meterSalesForTank(tank.id) + (linked ? meterSalesForTank(linked.id) : 0);
-            const closing   = subTotal - sales;
+            const closing   = subTotal - sales;  // meter-calculated closing stock
             const dipStock  = Number(closeDip?.dip_volume ?? 0);
             const dipStock2 = Number(closeDip2?.dip_volume ?? 0);
             const totalDip  = dipStock + dipStock2;
-            const shortage  = totalDip < closing ? closing - totalDip : 0;
-            const excess    = totalDip > closing ? totalDip - closing : 0;
-            const price     = getCurrentPrice(tank.product_id);
 
-            // Previous closing dip (opening dip stock reference)
-            const openingDipStock = Number(tank.last_dip_stock ?? 0) + Number(linked?.last_dip_stock ?? 0);
+            // Shortage: negative = physical dip is less than meter calculation (legacy convention)
+            const shortage  = totalDip - closing;
+            const excess    = shortage > 0 ? shortage : 0;
 
-            // Purchase value in KES
+            // Variance Ltrs: meter sales minus actual dip consumption for this shift
+            const dipConsumption = openingDipStock + purchase - totalDip;
+            const varianceLtrs   = sales - dipConsumption;
+
+            const price       = getCurrentPrice(tank.product_id);
             const purchaseShs = purchase * price;
 
             // Truck reg from any delivery for this tank
@@ -272,11 +304,11 @@ const shortageRows = computed(() => {
                 }));
 
             return {
-                tank, linked, opening, purchase, pumpTest, subTotal,
+                tank, linked, openingMeter, openingDipStock, purchase, pumpTest, subTotal,
                 sales, closing, dipStock, dipStock2, totalDip,
-                shortage, excess, variance: totalDip - closing,
+                shortage, excess, varianceLtrs,
                 nozzleBreakdown, price,
-                openingDipStock, purchaseShs, truckReg, cumulativeVariancePct,
+                purchaseShs, truckReg, cumulativeVariancePct,
             };
         });
 });
@@ -329,6 +361,73 @@ function submitCreditSale() {
     });
 }
 
+const editingSaleId  = ref(null);
+const editCreditForm = useForm({
+    product_id:    '',
+    type:          'fuel',
+    quantity:      '',
+    price_applied: '',
+    total_value:   '',
+    vehicle_plate: '',
+    notes:         '',
+});
+
+function startEditSale(sale) {
+    editingSaleId.value             = sale.id;
+    editCreditForm.product_id       = String(sale.product_id ?? '');
+    editCreditForm.type             = sale.type ?? 'fuel';
+    editCreditForm.quantity         = sale.quantity;
+    editCreditForm.price_applied    = sale.price_applied;
+    editCreditForm.total_value      = Number(sale.total_value ?? 0).toFixed(2);
+    editCreditForm.vehicle_plate    = sale.vehicle_plate ?? '';
+    editCreditForm.notes            = sale.notes ?? '';
+}
+
+function cancelEditSale() {
+    editingSaleId.value = null;
+    editCreditForm.reset();
+}
+
+function onEditQtyInput(e) {
+    const qty   = Number(e.target.value);
+    const price = Number(editCreditForm.price_applied);
+    editCreditForm.total_value = (qty * price).toFixed(2);
+}
+
+function onEditPriceInput(e) {
+    const qty   = Number(editCreditForm.quantity);
+    const price = Number(e.target.value);
+    editCreditForm.total_value = (qty * price).toFixed(2);
+}
+
+function onEditAmountInput() {
+    const amount = Number(editCreditForm.total_value);
+    const qty    = Number(editCreditForm.quantity);
+    if (qty > 0) editCreditForm.price_applied = (amount / qty).toFixed(4);
+}
+
+function submitEditSale(saleId) {
+    editCreditForm.put(route('credit-sales.update', saleId), {
+        onSuccess: () => { editingSaleId.value = null; editCreditForm.reset(); },
+    });
+}
+
+const selectedCustomer = computed(() =>
+    (props.station?.credit_customers ?? [])
+        .find(c => String(c.id) === String(creditForm.credit_customer_id)) ?? null
+);
+
+function getCustomerBalance(customerId) {
+    const c = (props.station?.credit_customers ?? [])
+        .find(c => String(c.id) === String(customerId));
+    if (!c) return null;
+    return parseFloat(c.initial_opening_balance ?? 0)
+         + parseFloat(c.credit_sales_sum_total_value ?? 0)
+         - parseFloat(c.payments_sum_amount ?? 0);
+}
+
+const selectedCustomerBalance = computed(() => getCustomerBalance(creditForm.credit_customer_id));
+
 const totalClientSales = computed(() =>
     (props.shift.credit_sales ?? []).reduce((sum, s) => sum + Number(s.total_value), 0)
 );
@@ -336,7 +435,7 @@ const totalClientSales = computed(() =>
 // ── Cards ─────────────────────────────────────────────────────────────────────
 const cardForm = useForm({
     card_name:  '',
-    trans_date: props.shift.shift_date,
+    trans_date: String(props.shift.shift_date ?? '').substring(0, 10),
     reference:  '',
     amount:     '',
     recon_date: '',
@@ -528,23 +627,51 @@ function generateDsr() {
 
                 <!-- Locked banner -->
                 <div v-if="isLocked"
-                    class="mb-4 flex items-center gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-800">
-                    <svg class="h-5 w-5 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                    </svg>
-                    <div>
-                        <p class="font-semibold text-sm">This shift is locked — DSR has been finalised and approved.</p>
-                        <p class="text-xs mt-0.5 text-red-600">All records are read-only. Use the Adjustments section on the DSR to record corrections.</p>
+                    class="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-red-800">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-3">
+                            <svg class="h-5 w-5 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                            </svg>
+                            <div>
+                                <p class="font-semibold text-sm">This shift is locked.</p>
+                                <p class="text-xs mt-0.5 text-red-600">All records are read-only.</p>
+                            </div>
+                        </div>
+                        <button v-if="isManager" @click="showUnlockForm = !showUnlockForm"
+                            class="shrink-0 border border-red-400 text-red-700 text-xs font-medium px-3 py-1.5 rounded hover:bg-red-100">
+                            Unlock Shift
+                        </button>
+                    </div>
+
+                    <!-- Unlock reason form -->
+                    <div v-if="showUnlockForm && isManager" class="mt-3 pt-3 border-t border-red-200">
+                        <p class="text-xs text-red-700 mb-2">State the reason for unlocking this shift:</p>
+                        <textarea v-model="unlockForm.reason" rows="2"
+                            placeholder="e.g. Meter reading correction needed…"
+                            class="w-full border border-red-300 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-red-400 mb-2"></textarea>
+                        <p v-if="unlockForm.errors.reason" class="text-xs text-red-700 mb-1">{{ unlockForm.errors.reason }}</p>
+                        <p v-if="unlockForm.errors.unlock" class="text-xs text-red-700 mb-1">{{ unlockForm.errors.unlock }}</p>
+                        <div class="flex gap-2">
+                            <button @click="submitUnlock" :disabled="unlockForm.processing"
+                                class="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded hover:bg-red-700 disabled:opacity-50">
+                                Confirm Unlock
+                            </button>
+                            <button @click="showUnlockForm = false; unlockForm.reset()"
+                                class="px-3 py-1.5 border border-red-300 text-red-700 text-xs rounded hover:bg-red-50">
+                                Cancel
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Tabs -->
                 <div class="border-b border-gray-200 mb-0">
-                    <nav aria-label="Shift detail tabs" class="flex flex-wrap -mb-px">
+                    <nav aria-label="Shift detail tabs" class="flex overflow-x-auto -mb-px scrollbar-none">
                         <button v-for="tab in tabs" :key="tab.key"
                             @click="activeTab = tab.key"
-                            class="px-4 py-2 text-sm font-medium border-b-2 mr-1 transition-colors inline-flex items-center"
+                            class="px-4 py-2 text-sm font-medium border-b-2 mr-1 transition-colors inline-flex items-center whitespace-nowrap flex-shrink-0"
                             :class="activeTab === tab.key
                                 ? 'border-orange-500 text-orange-500'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'">
@@ -567,146 +694,140 @@ function generateDsr() {
                                 <thead>
                                     <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
                                         <th class="px-3 py-2">Pump Name</th>
-                                        <th class="px-3 py-2 text-right">Sales Qty Mechanical</th>
-                                        <th class="px-3 py-2 text-right">Sales Qty Electrical</th>
+                                        <th class="px-3 py-2 text-right">Sales Qty Mech</th>
+                                        <th class="px-3 py-2 text-right">Sales Qty Elec</th>
                                         <th class="px-3 py-2 text-right">Sales Shs</th>
+                                        <th class="px-3 py-2 w-16"></th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y divide-gray-100">
-                                    <tr v-for="nozzle in [...(station.pump_nozzles ?? [])].sort((a, b) => (a.nozzle_name ?? '').localeCompare(b.nozzle_name ?? ''))" :key="nozzle.id"
-                                        class="hover:bg-blue-50 cursor-pointer"
-                                        @click="!isLocked && (meterForm.nozzle_id = String(nozzle.id), onNozzleSelect())">
-                                        <td class="px-3 py-2 font-medium">
-                                            {{ nozzle.nozzle_name }}
-                                            <span class="text-xs text-gray-400 ml-1">{{ nozzle.tank?.tank_name }}</span>
-                                        </td>
-                                        <td class="px-3 py-2 text-right font-mono">
-                                            {{ fmt(getMeterByNozzle(nozzle.id)?.mechanical_sales ?? 0, 1) }}
-                                        </td>
-                                        <td class="px-3 py-2 text-right font-mono">
-                                            {{ fmt(getMeterByNozzle(nozzle.id)?.litres_sold ?? 0, 3) }}
-                                        </td>
-                                        <td class="px-3 py-2 text-right font-mono">
-                                            {{ fmt2(getMeterByNozzle(nozzle.id)?.shs_sold ?? 0) }}
-                                        </td>
-                                    </tr>
+                                <tbody>
+                                    <template v-for="nozzle in [...(station.pump_nozzles ?? [])].sort((a, b) => (a.nozzle_name ?? '').localeCompare(b.nozzle_name ?? ''))" :key="nozzle.id">
+
+                                        <!-- Inline edit form row -->
+                                        <tr v-if="editingNozzleId === nozzle.id" class="bg-blue-50 border-y border-blue-200">
+                                            <td colspan="5" class="px-3 py-3">
+                                                <p class="text-xs font-semibold text-blue-800 mb-3">
+                                                    {{ nozzle.nozzle_name }}
+                                                    <span class="text-blue-500 font-normal ml-1">{{ nozzle.tank?.tank_name }}</span>
+                                                </p>
+                                                <form @submit.prevent="submitMeter">
+                                                    <table class="w-full text-sm mb-3">
+                                                        <thead>
+                                                            <tr class="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                                                <th class="pb-1 text-left">Meter</th>
+                                                                <th class="pb-1 text-right">Opening</th>
+                                                                <th class="pb-1 text-right">Closing</th>
+                                                                <th class="pb-1 text-right">Sales</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody class="divide-y divide-blue-100">
+                                                            <tr>
+                                                                <td class="py-1.5 text-gray-600 w-24">Mechanical</td>
+                                                                <td class="py-1.5 text-right font-mono text-gray-400 pr-4">
+                                                                    {{ selectedReading?.opening_mechanical != null ? Number(selectedReading.opening_mechanical).toFixed(1) : '—' }}
+                                                                </td>
+                                                                <td class="py-1.5 text-right">
+                                                                    <input v-model="meterForm.closing_mechanical" type="number" step="0.1" required
+                                                                        class="w-32 border border-blue-300 rounded px-2 py-1 text-sm font-mono text-right focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                                                        placeholder="0.0" />
+                                                                </td>
+                                                                <td class="py-1.5 text-right font-mono text-gray-500 pl-4">
+                                                                    {{ (meterForm.closing_mechanical && selectedReading)
+                                                                        ? Number(meterForm.closing_mechanical - selectedReading.opening_mechanical).toFixed(1) : '' }}
+                                                                </td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td class="py-1.5 text-gray-600">Electrical</td>
+                                                                <td class="py-1.5 text-right font-mono text-gray-400 pr-4">
+                                                                    {{ selectedReading?.opening_electrical != null ? Number(selectedReading.opening_electrical).toFixed(3) : '—' }}
+                                                                </td>
+                                                                <td class="py-1.5 text-right">
+                                                                    <input v-model="meterForm.closing_electrical" type="number" step="0.001" required
+                                                                        class="w-32 border border-blue-300 rounded px-2 py-1 text-sm font-mono text-right focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                                                        placeholder="0.000" />
+                                                                </td>
+                                                                <td class="py-1.5 text-right font-mono font-semibold pl-4">
+                                                                    {{ (meterForm.closing_electrical && selectedReading)
+                                                                        ? Number(meterForm.closing_electrical - selectedReading.opening_electrical).toFixed(3) : '' }}
+                                                                </td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td class="py-1.5 text-gray-600">Shs</td>
+                                                                <td class="py-1.5 text-right font-mono text-gray-400 pr-4">
+                                                                    {{ selectedReading?.opening_shs != null ? Number(selectedReading.opening_shs).toFixed(2) : '—' }}
+                                                                </td>
+                                                                <td class="py-1.5 text-right">
+                                                                    <input v-model="meterForm.closing_shs" type="number" step="0.01"
+                                                                        class="w-32 border border-blue-300 rounded px-2 py-1 text-sm font-mono text-right focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                                                        placeholder="0.00" />
+                                                                </td>
+                                                                <td class="py-1.5 text-right font-mono text-gray-500 pl-4">
+                                                                    {{ (meterForm.closing_shs && selectedReading?.opening_shs != null)
+                                                                        ? Number(meterForm.closing_shs - selectedReading.opening_shs).toFixed(2) : '' }}
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                    <div class="flex items-center gap-2">
+                                                        <button type="submit" :disabled="meterForm.processing"
+                                                            class="px-4 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-50">
+                                                            Save
+                                                        </button>
+                                                        <button v-if="selectedReading?.closing_electrical != null"
+                                                            type="button" @click="clearMeterReading"
+                                                            class="px-3 py-1.5 border border-red-300 text-red-600 rounded text-xs font-medium hover:bg-red-50">
+                                                            Clear
+                                                        </button>
+                                                        <button type="button" @click="cancelEditNozzle"
+                                                            class="px-3 py-1.5 border border-gray-300 text-gray-600 rounded text-xs hover:bg-gray-50">
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                </form>
+                                            </td>
+                                        </tr>
+
+                                        <!-- Normal display row -->
+                                        <tr v-else class="border-b border-gray-100 hover:bg-gray-50">
+                                            <td class="px-3 py-2 font-medium">
+                                                {{ nozzle.nozzle_name }}
+                                                <span class="text-xs text-gray-400 ml-1">{{ nozzle.tank?.tank_name }}</span>
+                                            </td>
+                                            <td class="px-3 py-2 text-right font-mono">
+                                                {{ fmtReading(getMeterByNozzle(nozzle.id)?.mechanical_sales, 1) }}
+                                            </td>
+                                            <td class="px-3 py-2 text-right font-mono">
+                                                {{ fmtReading(getMeterByNozzle(nozzle.id)?.litres_sold, 3) }}
+                                            </td>
+                                            <td class="px-3 py-2 text-right font-mono">
+                                                {{ fmt2(getMeterByNozzle(nozzle.id)?.shs_sold ?? 0) }}
+                                            </td>
+                                            <td class="px-3 py-2 text-center">
+                                                <button v-if="!isLocked" @click="startEditNozzle(nozzle)"
+                                                    class="text-xs text-blue-600 hover:underline font-medium px-2 py-0.5 rounded hover:bg-blue-50">
+                                                    Edit
+                                                </button>
+                                            </td>
+                                        </tr>
+
+                                    </template>
                                 </tbody>
                                 <tfoot>
-                                    <tr class="font-semibold bg-gray-50">
+                                    <tr class="font-semibold bg-gray-50 border-t-2 border-gray-200">
                                         <td class="px-3 py-2">TOTAL</td>
                                         <td class="px-3 py-2 text-right font-mono"></td>
-                                        <td class="px-3 py-2 text-right font-mono">{{ fmt(pumpSalesTotal, 3) }}</td>
+                                        <td class="px-3 py-2 text-right font-mono">{{ Number(pumpSalesTotal).toFixed(3) }}</td>
                                         <td class="px-3 py-2 text-right font-mono">{{ fmt2(pumpRevenueTotal) }}</td>
+                                        <td></td>
                                     </tr>
                                 </tfoot>
                             </table>
-                        </div>
-
-                        <!-- Entry form -->
-                        <div v-if="!isLocked" class="mt-6 border-t pt-4">
-                            <h3 class="text-sm font-semibold text-gray-700 mb-3">Enter Closing Reading</h3>
-                            <form @submit.prevent="submitMeter" class="space-y-4">
-                                <!-- Nozzle selector -->
-                                <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Pump Nozzle</label>
-                                    <select v-model="meterForm.nozzle_id" @change="onNozzleSelect" required
-                                        class="w-full border rounded px-3 py-2 text-sm">
-                                        <option value="">— Select Nozzle —</option>
-                                        <template v-for="(nozzles, productName) in nozzlesByProduct" :key="productName">
-                                            <optgroup :label="productName">
-                                                <option v-for="n in nozzles" :key="n.id" :value="String(n.id)">
-                                                    {{ n.nozzle_name }}
-                                                </option>
-                                            </optgroup>
-                                        </template>
-                                    </select>
-                                </div>
-
-                                <!-- Opening / Closing grid -->
-                                <div v-if="meterForm.nozzle_id" class="border rounded overflow-hidden">
-                                    <table class="w-full text-sm">
-                                        <thead>
-                                            <tr class="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                                <th class="px-3 py-2 text-left">Meter</th>
-                                                <th class="px-3 py-2 text-right">Opening (auto)</th>
-                                                <th class="px-3 py-2 text-right">Closing (enter)</th>
-                                                <th class="px-3 py-2 text-right">Sales</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-gray-100">
-                                            <tr>
-                                                <td class="px-3 py-2 text-gray-600">Mechanical</td>
-                                                <td class="px-3 py-2 text-right font-mono text-gray-400">
-                                                    {{ selectedReading?.opening_mechanical != null
-                                                        ? Number(selectedReading.opening_mechanical).toFixed(1)
-                                                        : '—' }}
-                                                </td>
-                                                <td class="px-3 py-2 text-right">
-                                                    <input v-model="meterForm.closing_mechanical" type="number" step="0.1" required
-                                                        class="w-36 border rounded px-2 py-1 text-sm font-mono text-right" placeholder="0.0" />
-                                                </td>
-                                                <td class="px-3 py-2 text-right font-mono text-gray-500">
-                                                    {{ (meterForm.closing_mechanical && selectedReading)
-                                                        ? Number(meterForm.closing_mechanical - selectedReading.opening_mechanical).toFixed(1)
-                                                        : '' }}
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td class="px-3 py-2 text-gray-600">Electrical</td>
-                                                <td class="px-3 py-2 text-right font-mono text-gray-400">
-                                                    {{ selectedReading?.opening_electrical != null
-                                                        ? Number(selectedReading.opening_electrical).toFixed(3)
-                                                        : '—' }}
-                                                </td>
-                                                <td class="px-3 py-2 text-right">
-                                                    <input v-model="meterForm.closing_electrical" type="number" step="0.001" required
-                                                        class="w-36 border rounded px-2 py-1 text-sm font-mono text-right" placeholder="0.000" />
-                                                </td>
-                                                <td class="px-3 py-2 text-right font-mono font-semibold">
-                                                    {{ (meterForm.closing_electrical && selectedReading)
-                                                        ? Number(meterForm.closing_electrical - selectedReading.opening_electrical).toFixed(3)
-                                                        : '' }}
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td class="px-3 py-2 text-gray-600">Shs</td>
-                                                <td class="px-3 py-2 text-right font-mono text-gray-400">
-                                                    {{ selectedReading?.opening_shs != null
-                                                        ? Number(selectedReading.opening_shs).toFixed(2)
-                                                        : '—' }}
-                                                </td>
-                                                <td class="px-3 py-2 text-right">
-                                                    <input v-model="meterForm.closing_shs" type="number" step="0.01"
-                                                        class="w-36 border rounded px-2 py-1 text-sm font-mono text-right" placeholder="0.00" />
-                                                </td>
-                                                <td class="px-3 py-2 text-right font-mono text-gray-500">
-                                                    {{ (meterForm.closing_shs && selectedReading?.opening_shs != null)
-                                                        ? Number(meterForm.closing_shs - selectedReading.opening_shs).toFixed(2)
-                                                        : '' }}
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                <div v-if="meterForm.nozzle_id" class="flex items-center gap-3">
-                                    <button type="submit" :disabled="meterForm.processing"
-                                        class="px-6 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                                        Save Reading
-                                    </button>
-                                    <button v-if="selectedReading?.closing_electrical != null"
-                                        type="button" @click="clearMeterReading"
-                                        class="px-4 py-2 border border-red-300 text-red-600 rounded text-sm font-medium hover:bg-red-50">
-                                        Clear Reading
-                                    </button>
-                                </div>
-                            </form>
                         </div>
                     </div>
 
                     <!-- ── Oils ─────────────────────────────────────────── -->
                     <div v-show="activeTab === 'oils'">
-                        <div class="grid md:grid-cols-2 gap-6">
+                        <div class="space-y-6">
                             <div>
                                 <table class="w-full text-sm">
                                     <thead>
@@ -776,28 +897,28 @@ function generateDsr() {
                                 </div>
                             </div>
 
-                            <div class="space-y-4">
-                                <div class="bg-gray-50 rounded p-4 space-y-3">
-                                    <div class="flex justify-between items-center">
+                            <div class="flex flex-wrap gap-6">
+                                <div class="bg-gray-50 rounded p-4 space-y-3 min-w-[220px]">
+                                    <div class="flex justify-between items-center gap-4">
                                         <span class="text-sm text-gray-600">Z Amount A:</span>
                                         <input v-model="zAmountA" type="number" step="0.01"
-                                            class="w-36 border rounded px-2 py-1 text-sm font-mono text-right" />
+                                            class="w-32 border rounded px-2 py-1 text-sm font-mono text-right" />
                                     </div>
-                                    <div class="flex justify-between items-center">
+                                    <div class="flex justify-between items-center gap-4">
                                         <span class="text-sm text-gray-600">Z Amount B:</span>
                                         <input v-model="zAmountB" type="number" step="0.01"
-                                            class="w-36 border rounded px-2 py-1 text-sm font-mono text-right" />
+                                            class="w-32 border rounded px-2 py-1 text-sm font-mono text-right" />
                                     </div>
-                                    <div class="flex justify-between items-center">
+                                    <div class="flex justify-between items-center gap-4">
                                         <span class="text-sm text-gray-600">Z Amount D:</span>
                                         <input v-model="zAmountD" type="number" step="0.01"
-                                            class="w-36 border rounded px-2 py-1 text-sm font-mono text-right" />
+                                            class="w-32 border rounded px-2 py-1 text-sm font-mono text-right" />
                                     </div>
                                 </div>
                                 <div class="text-sm space-y-1 pt-2">
-                                    <div class="flex justify-between"><span>Total Oil Sales:</span><span class="font-mono font-semibold">{{ fmt2(totalOilSales) }}</span></div>
-                                    <div class="flex justify-between text-gray-500"><span>Total Gas Sales:</span><span class="font-mono">0.00</span></div>
-                                    <div class="flex justify-between text-gray-500"><span>Total Empty Gas Sales:</span><span class="font-mono">0.00</span></div>
+                                    <div class="flex justify-between gap-8"><span>Total Oil Sales:</span><span class="font-mono font-semibold">{{ fmt2(totalOilSales) }}</span></div>
+                                    <div class="flex justify-between gap-8 text-gray-500"><span>Total Gas Sales:</span><span class="font-mono">0.00</span></div>
+                                    <div class="flex justify-between gap-8 text-gray-500"><span>Total Empty Gas Sales:</span><span class="font-mono">0.00</span></div>
                                 </div>
                             </div>
                         </div>
@@ -806,19 +927,18 @@ function generateDsr() {
                     <!-- ── Shortage Calculation ──────────────────────────── -->
                     <div v-show="activeTab === 'shortage'">
                         <!-- Tank list -->
-                        <div class="border rounded overflow-hidden mb-4">
-                            <table class="w-full text-sm">
+                        <div class="border rounded mb-4">
+                            <table class="w-full text-xs">
                                 <thead>
-                                    <tr class="bg-gray-700 text-white text-xs uppercase">
-                                        <th class="px-4 py-2 text-left">Tank</th>
-                                        <th class="px-4 py-2 text-left">Product</th>
-                                        <th class="px-4 py-2 text-right">Opening Stock</th>
-                                        <th class="px-4 py-2 text-right">Purchase</th>
-                                        <th class="px-4 py-2 text-right">Sales</th>
-                                        <th class="px-4 py-2 text-right">Closing (Calc.)</th>
-                                        <th class="px-4 py-2 text-right">Dip Stock</th>
-                                        <th class="px-4 py-2 text-right">Variance Ltrs</th>
-                                        <th class="px-4 py-2 text-center">Status</th>
+                                    <tr class="bg-gray-700 text-white uppercase tracking-wide">
+                                        <th class="px-3 py-2 text-left">Tank / Product</th>
+                                        <th class="px-3 py-2 text-right">Open Stock</th>
+                                        <th class="px-3 py-2 text-right">Purchase</th>
+                                        <th class="px-3 py-2 text-right">Sales</th>
+                                        <th class="px-3 py-2 text-right">Closing</th>
+                                        <th class="px-3 py-2 text-right">Dip</th>
+                                        <th class="px-3 py-2 text-right">Variance</th>
+                                        <th class="px-3 py-2 text-center">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -828,23 +948,25 @@ function generateDsr() {
                                         :class="selectedShortageRow?.tank.id === row.tank.id
                                             ? 'bg-blue-50 hover:bg-blue-100'
                                             : 'hover:bg-gray-50'">
-                                        <td class="px-4 py-2 font-medium text-gray-800">
-                                            {{ row.tank.tank_name }}<span v-if="row.linked" class="text-gray-400"> + {{ row.linked.tank_name }}</span>
+                                        <td class="px-3 py-2">
+                                            <div class="font-medium text-gray-800">
+                                                {{ row.tank.tank_name }}<span v-if="row.linked" class="text-gray-400"> + {{ row.linked.tank_name }}</span>
+                                            </div>
+                                            <div class="text-gray-400">{{ row.tank.product?.product_name ?? '—' }}</div>
                                         </td>
-                                        <td class="px-4 py-2 text-gray-600">{{ row.tank.product?.product_name ?? '—' }}</td>
-                                        <td class="px-4 py-2 text-right font-mono">{{ fmt(row.opening, 3) }}</td>
-                                        <td class="px-4 py-2 text-right font-mono text-blue-600">{{ fmt(row.purchase, 3) }}</td>
-                                        <td class="px-4 py-2 text-right font-mono text-orange-600">{{ fmt(row.sales, 3) }}</td>
-                                        <td class="px-4 py-2 text-right font-mono">{{ fmt(row.closing, 3) }}</td>
-                                        <td class="px-4 py-2 text-right font-mono">{{ fmt(row.totalDip, 3) }}</td>
-                                        <td class="px-4 py-2 text-right font-mono font-semibold"
-                                            :class="row.variance < 0 ? 'text-red-600' : row.variance > 0 ? 'text-green-600' : 'text-gray-400'">
-                                            {{ row.variance >= 0 ? '+' : '' }}{{ fmt(row.variance, 3) }}
+                                        <td class="px-3 py-2 text-right font-mono">{{ fmt(row.openingMeter, 3) }}</td>
+                                        <td class="px-3 py-2 text-right font-mono text-blue-600">{{ fmt(row.purchase, 3) }}</td>
+                                        <td class="px-3 py-2 text-right font-mono text-orange-600">{{ fmt(row.sales, 3) }}</td>
+                                        <td class="px-3 py-2 text-right font-mono">{{ fmt(row.closing, 3) }}</td>
+                                        <td class="px-3 py-2 text-right font-mono">{{ fmt(row.totalDip, 3) }}</td>
+                                        <td class="px-3 py-2 text-right font-mono font-semibold"
+                                            :class="row.shortage < 0 ? 'text-red-600' : row.shortage > 0 ? 'text-green-600' : 'text-gray-400'">
+                                            {{ row.shortage >= 0 ? '+' : '' }}{{ fmt(row.shortage, 3) }}
                                         </td>
-                                        <td class="px-4 py-2 text-center">
-                                            <span v-if="row.shortage > 0" class="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">Short</span>
-                                            <span v-else-if="row.excess > 0" class="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">Excess</span>
-                                            <span v-else class="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">OK</span>
+                                        <td class="px-3 py-2 text-center">
+                                            <span v-if="row.shortage < 0" class="px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-700">Short</span>
+                                            <span v-else-if="row.shortage > 0" class="px-2 py-0.5 rounded-full font-semibold bg-green-100 text-green-700">Excess</span>
+                                            <span v-else class="px-2 py-0.5 rounded-full font-semibold bg-gray-100 text-gray-500">OK</span>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -879,14 +1001,14 @@ function generateDsr() {
                                         </thead>
                                         <tbody class="text-sm divide-y divide-gray-100">
                                             <tr class="hover:bg-gray-50">
+                                                <td class="px-3 py-1.5 text-gray-600">Opening Stock <span class="text-xs text-gray-400">(meter)</span></td>
+                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.openingMeter, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(selectedShortageRow.openingMeter * selectedShortageRow.price) }}</td>
+                                            </tr>
+                                            <tr class="hover:bg-gray-50">
                                                 <td class="px-3 py-1.5 text-gray-600">Opening Dip Stock</td>
                                                 <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.openingDipStock, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(selectedShortageRow.openingDipStock * selectedShortageRow.price) }}</td>
-                                            </tr>
-                                            <tr class="hover:bg-gray-50">
-                                                <td class="px-3 py-1.5 text-gray-600">Opening Stock</td>
-                                                <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.opening, 3) }}</td>
-                                                <td class="px-3 py-1.5 text-right font-mono text-gray-400">{{ fmt2(selectedShortageRow.opening * selectedShortageRow.price) }}</td>
                                             </tr>
                                             <tr class="hover:bg-gray-50">
                                                 <td class="px-3 py-1.5 text-gray-600">
@@ -937,28 +1059,28 @@ function generateDsr() {
                                                 <td class="px-3 py-1.5 text-right font-mono">{{ fmt(selectedShortageRow.totalDip, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono">{{ fmt2(selectedShortageRow.totalDip * selectedShortageRow.price) }}</td>
                                             </tr>
-                                            <tr v-if="selectedShortageRow.shortage > 0" class="bg-red-50">
+                                            <tr v-if="selectedShortageRow.shortage < 0" class="bg-red-50">
                                                 <td class="px-3 py-1.5 font-semibold text-red-700">Shortage</td>
                                                 <td class="px-3 py-1.5 text-right font-mono font-semibold text-red-700">{{ fmt(selectedShortageRow.shortage, 3) }}</td>
                                                 <td class="px-3 py-1.5 text-right font-mono font-semibold text-red-700">{{ fmt2(selectedShortageRow.shortage * selectedShortageRow.price) }}</td>
                                             </tr>
                                             <tr v-if="selectedShortageRow.excess > 0" class="bg-green-50">
                                                 <td class="px-3 py-1.5 font-semibold text-green-700">Excess</td>
-                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-green-700">{{ fmt(selectedShortageRow.excess, 3) }}</td>
-                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-green-700">{{ fmt2(selectedShortageRow.excess * selectedShortageRow.price) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-green-700">+{{ fmt(selectedShortageRow.excess, 3) }}</td>
+                                                <td class="px-3 py-1.5 text-right font-mono font-semibold text-green-700">+{{ fmt2(selectedShortageRow.excess * selectedShortageRow.price) }}</td>
                                             </tr>
-                                            <tr v-if="selectedShortageRow.shortage === 0 && selectedShortageRow.excess === 0" class="bg-green-50">
+                                            <tr v-if="selectedShortageRow.shortage === 0" class="bg-green-50">
                                                 <td class="px-3 py-1.5 text-green-700 font-semibold" colspan="3">No Variance</td>
                                             </tr>
                                             <tr class="border-t-2 border-gray-300">
                                                 <td class="px-3 py-1.5 font-semibold text-gray-700">Variance Ltrs</td>
                                                 <td class="px-3 py-1.5 text-right font-mono font-semibold"
-                                                    :class="selectedShortageRow.variance < 0 ? 'text-red-600' : selectedShortageRow.variance > 0 ? 'text-green-600' : 'text-gray-500'">
-                                                    {{ selectedShortageRow.variance >= 0 ? '+' : '' }}{{ fmt(selectedShortageRow.variance, 3) }}
+                                                    :class="selectedShortageRow.varianceLtrs < 0 ? 'text-red-600' : selectedShortageRow.varianceLtrs > 0 ? 'text-green-600' : 'text-gray-500'">
+                                                    {{ selectedShortageRow.varianceLtrs >= 0 ? '+' : '' }}{{ fmt(selectedShortageRow.varianceLtrs, 3) }}
                                                 </td>
                                                 <td class="px-3 py-1.5 text-right font-mono font-semibold"
-                                                    :class="selectedShortageRow.variance < 0 ? 'text-red-600' : selectedShortageRow.variance > 0 ? 'text-green-600' : 'text-gray-500'">
-                                                    {{ selectedShortageRow.variance >= 0 ? '+' : '' }}{{ fmt2(selectedShortageRow.variance * selectedShortageRow.price) }}
+                                                    :class="selectedShortageRow.varianceLtrs < 0 ? 'text-red-600' : selectedShortageRow.varianceLtrs > 0 ? 'text-green-600' : 'text-gray-500'">
+                                                    {{ selectedShortageRow.varianceLtrs >= 0 ? '+' : '' }}{{ fmt2(selectedShortageRow.varianceLtrs * selectedShortageRow.price) }}
                                                 </td>
                                             </tr>
                                             <tr v-if="selectedShortageRow.cumulativeVariancePct !== null" class="bg-gray-50">
@@ -1034,56 +1156,152 @@ function generateDsr() {
 
                     <!-- ── Client Sales ──────────────────────────────────── -->
                     <div v-show="activeTab === 'clients'">
-                        <div class="overflow-x-auto">
+                        <div>
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                                    <th class="px-3 py-2">Debit Note</th>
-                                    <th class="px-3 py-2">Client Name</th>
-                                    <th class="px-3 py-2">Vehicle</th>
-                                    <th class="px-3 py-2">Product</th>
-                                    <th class="px-3 py-2">Type</th>
-                                    <th class="px-3 py-2 text-right">Qty (L)</th>
-                                    <th class="px-3 py-2 text-right">Price</th>
+                                    <th class="px-3 py-2">Client</th>
+                                    <th class="px-3 py-2">Product / Type</th>
+                                    <th class="px-3 py-2 text-right">Qty / Price</th>
                                     <th class="px-3 py-2 text-right">Amount</th>
-                                    <th class="px-3 py-2 text-right">VAT</th>
-                                    <th class="px-3 py-2 text-right">WHT</th>
+                                    <th class="px-3 py-2"></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
-                                <tr v-for="sale in (shift.credit_sales ?? [])" :key="sale.id" class="hover:bg-gray-50">
-                                    <td class="px-3 py-2 font-mono text-xs text-gray-500">{{ sale.debit_note }}</td>
-                                    <td class="px-3 py-2 font-medium">{{ sale.credit_customer?.customer_name }}</td>
-                                    <td class="px-3 py-2 text-gray-500 text-xs">{{ sale.vehicle_plate ?? '—' }}</td>
-                                    <td class="px-3 py-2 text-gray-500">{{ sale.product?.product_name }}</td>
-                                    <td class="px-3 py-2">
-                                        <span class="px-1.5 py-0.5 rounded text-xs font-medium"
-                                            :class="sale.type === 'fuel' ? 'bg-blue-100 text-blue-700' : sale.type === 'oil' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'">
-                                            {{ sale.type }}
-                                        </span>
-                                    </td>
-                                    <td class="px-3 py-2 text-right font-mono">{{ fmt(sale.quantity, 3) }}</td>
-                                    <td class="px-3 py-2 text-right font-mono text-gray-500">{{ fmt2(sale.price_applied) }}</td>
-                                    <td class="px-3 py-2 text-right font-mono font-semibold">{{ fmt2(sale.total_value) }}</td>
-                                    <td class="px-3 py-2 text-right font-mono text-gray-500">{{ fmt2(sale.vat_amount) }}</td>
-                                    <td class="px-3 py-2 text-right font-mono text-gray-500">{{ fmt2(sale.wht_amount) }}</td>
-                                </tr>
+                                <template v-for="sale in (shift.credit_sales ?? [])" :key="sale.id">
+                                    <!-- Read row -->
+                                    <tr class="hover:bg-gray-50" :class="editingSaleId === sale.id ? 'bg-blue-50' : ''">
+                                        <td class="px-3 py-2">
+                                            <div class="font-medium">{{ sale.credit_customer?.customer_name }}</div>
+                                            <div class="text-xs text-gray-400 font-mono">{{ sale.debit_note }}</div>
+                                            <div v-if="sale.vehicle_plate" class="text-xs text-gray-400">{{ sale.vehicle_plate }}</div>
+                                            <div v-if="sale.notes" class="text-xs text-gray-400 italic">{{ sale.notes }}</div>
+                                        </td>
+                                        <td class="px-3 py-2">
+                                            <div class="text-gray-700">{{ sale.product?.product_name }}</div>
+                                            <div class="mt-0.5">
+                                                <span class="px-1.5 py-0.5 rounded text-xs font-medium"
+                                                    :class="sale.type === 'fuel' ? 'bg-blue-100 text-blue-700' : sale.type === 'oil' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'">
+                                                    {{ sale.type }}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td class="px-3 py-2 text-right">
+                                            <div class="font-mono">{{ fmt(sale.quantity, 3) }} L</div>
+                                            <div class="text-xs text-gray-400 font-mono">@ {{ fmt2(sale.price_applied) }}</div>
+                                        </td>
+                                        <td class="px-3 py-2 text-right">
+                                            <div class="font-mono font-semibold">{{ fmt2(sale.total_value) }}</div>
+                                            <div class="text-xs text-gray-400 font-mono">VAT {{ fmt2(sale.vat_amount) }} · WHT {{ fmt2(sale.wht_amount) }}</div>
+                                        </td>
+                                        <td class="px-3 py-2 text-right whitespace-nowrap">
+                                            <button v-if="!isLocked && editingSaleId !== sale.id"
+                                                @click="startEditSale(sale)"
+                                                class="text-xs text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                                            <button v-if="!isLocked && editingSaleId === sale.id"
+                                                @click="cancelEditSale"
+                                                class="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+                                        </td>
+                                    </tr>
+                                    <!-- Inline edit row -->
+                                    <tr v-if="editingSaleId === sale.id" class="bg-blue-50 border-t border-blue-200">
+                                        <td colspan="5" class="px-3 py-3">
+                                            <div class="flex items-start justify-between mb-2">
+                                                <span class="text-xs font-semibold text-blue-700">Editing: {{ sale.credit_customer?.customer_name }}</span>
+                                                <div v-if="getCustomerBalance(sale.credit_customer_id) !== null" class="text-right">
+                                                    <div class="text-xs text-gray-500">Current Balance</div>
+                                                    <div class="text-xl font-bold"
+                                                        :class="getCustomerBalance(sale.credit_customer_id) > 0 ? 'text-red-600' : 'text-green-600'">
+                                                        {{ fmt2(getCustomerBalance(sale.credit_customer_id)) }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <form @submit.prevent="submitEditSale(sale.id)"
+                                                class="grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
+                                                <div>
+                                                    <label class="block text-xs text-gray-600 mb-1">Product</label>
+                                                    <select v-model="editCreditForm.product_id" required
+                                                        class="w-full border rounded px-2 py-1.5 text-sm">
+                                                        <option v-for="p in (station.products ?? [])" :key="p.id" :value="String(p.id)">
+                                                            {{ p.product_name }}
+                                                        </option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-600 mb-1">Type</label>
+                                                    <select v-model="editCreditForm.type"
+                                                        class="w-full border rounded px-2 py-1.5 text-sm">
+                                                        <option value="fuel">Fuel</option>
+                                                        <option value="oil">Oil</option>
+                                                        <option value="other">Other</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-600 mb-1">Qty (L)</label>
+                                                    <input v-model="editCreditForm.quantity" type="number" step="0.001" required
+                                                        @input="onEditQtyInput"
+                                                        class="w-full border rounded px-2 py-1.5 text-sm font-mono" />
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-600 mb-1">Price/L</label>
+                                                    <input v-model="editCreditForm.price_applied" type="number" step="0.0001" required
+                                                        @input="onEditPriceInput"
+                                                        class="w-full border rounded px-2 py-1.5 text-sm font-mono" />
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-600 mb-1">Amount</label>
+                                                    <input v-model="editCreditForm.total_value" type="number" step="0.01"
+                                                        @input="onEditAmountInput"
+                                                        class="w-full border rounded px-2 py-1.5 text-sm font-mono font-semibold text-right" />
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-600 mb-1">Vehicle</label>
+                                                    <input v-model="editCreditForm.vehicle_plate" type="text"
+                                                        class="w-full border rounded px-2 py-1.5 text-sm" />
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs text-gray-600 mb-1">Details</label>
+                                                    <input v-model="editCreditForm.notes" type="text"
+                                                        class="w-full border rounded px-2 py-1.5 text-sm" />
+                                                </div>
+                                                <div class="col-span-2 md:col-span-6 flex gap-2 justify-end mt-1">
+                                                    <button type="button" @click="cancelEditSale"
+                                                        class="px-3 py-1.5 text-sm border rounded text-gray-600 hover:bg-gray-100">Cancel</button>
+                                                    <button type="submit" :disabled="editCreditForm.processing"
+                                                        class="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
+                                                        Save Changes
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                </template>
                                 <tr v-if="!(shift.credit_sales ?? []).length">
-                                    <td colspan="10" class="px-3 py-4 text-center text-gray-400 text-sm">No credit sales</td>
+                                    <td colspan="5" class="px-3 py-4 text-center text-gray-400 text-sm">No credit sales</td>
                                 </tr>
                             </tbody>
                             <tfoot>
                                 <tr class="font-semibold bg-gray-50">
-                                    <td class="px-3 py-2" colspan="7">Total Sales On Account:</td>
+                                    <td class="px-3 py-2" colspan="3">Total Sales On Account:</td>
                                     <td class="px-3 py-2 text-right font-mono">{{ fmt2(totalClientSales) }}</td>
-                                    <td colspan="2"></td>
+                                    <td></td>
                                 </tr>
                             </tfoot>
                         </table>
                         </div>
 
                         <div v-if="!isLocked" class="mt-6 border-t pt-4">
-                            <h3 class="text-sm font-semibold text-gray-700 mb-3">Add Credit Sale</h3>
+                            <div class="flex items-start justify-between mb-3">
+                                <h3 class="text-sm font-semibold text-gray-700">Add Credit Sale</h3>
+                                <div v-if="selectedCustomerBalance !== null" class="text-right">
+                                    <div class="text-xs text-gray-500">Current Balance</div>
+                                    <div class="text-2xl font-bold"
+                                        :class="selectedCustomerBalance > 0 ? 'text-red-600' : 'text-green-600'">
+                                        {{ fmt2(selectedCustomerBalance) }}
+                                    </div>
+                                    <div class="text-xs text-gray-400">{{ selectedCustomer?.customer_name }}</div>
+                                </div>
+                            </div>
                             <form @submit.prevent="submitCreditSale" class="grid grid-cols-2 md:grid-cols-4 gap-3">
                                 <div class="col-span-2">
                                     <label class="block text-xs text-gray-600 mb-1">Client</label>
@@ -1126,6 +1344,11 @@ function generateDsr() {
                                     <label class="block text-xs text-gray-600 mb-1">Vehicle Plate</label>
                                     <input v-model="creditForm.vehicle_plate" type="text"
                                         class="w-full border rounded px-3 py-2 text-sm" placeholder="KAA 000A" />
+                                </div>
+                                <div class="col-span-2">
+                                    <label class="block text-xs text-gray-600 mb-1">Details</label>
+                                    <input v-model="creditForm.notes" type="text"
+                                        class="w-full border rounded px-3 py-2 text-sm" placeholder="Optional notes" />
                                 </div>
                                 <div class="flex items-end">
                                     <button type="submit" :disabled="creditForm.processing"
@@ -1528,5 +1751,14 @@ function generateDsr() {
 
             </div>
         </div>
+
+        <ConfirmModal
+            :show="confirmModal.show"
+            :title="confirmModal.title"
+            :message="confirmModal.message"
+            :variant="confirmModal.variant"
+            @confirm="handleConfirm"
+            @cancel="closeConfirm"
+        />
     </AuthenticatedLayout>
 </template>

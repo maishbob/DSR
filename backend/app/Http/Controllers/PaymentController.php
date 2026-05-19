@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Payment;
 use App\Services\AuditService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class PaymentController extends Controller
@@ -35,6 +36,7 @@ class PaymentController extends Controller
             'trans_type'     => 'nullable|in:receipts,fuel,lpg,pos,invoice',
             'amount'         => 'required|numeric|min:0.01',
             'payment_method' => 'nullable|in:cash,mpesa,bank_transfer,cheque,rtgs,equity_card,other',
+            'shift_id'       => ['nullable', Rule::exists('shifts', 'id')->where('station_id', $payment->station_id)],
             'reference'      => 'nullable|string|max:100',
             'notes'          => 'nullable|string',
         ]);

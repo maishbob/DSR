@@ -7,6 +7,7 @@ use App\Models\PumpNozzle;
 use App\Models\Shift;
 use App\Models\Station;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class ShiftService
 {
@@ -21,6 +22,10 @@ class ShiftService
             throw new \RuntimeException("A {$shiftType} shift already exists for {$date}.");
         }
 
+        $nextDsrNumber = (int) Shift::where('station_id', $station->id)
+            ->whereNotNull('dsr_number')
+            ->max(DB::raw('CAST(dsr_number AS UNSIGNED)')) + 1;
+
         $shift = Shift::create([
             'station_id' => $station->id,
             'shift_date' => $date,
@@ -28,6 +33,7 @@ class ShiftService
             'opened_at'  => now(),
             'opened_by'  => Auth::id(),
             'status'     => 'open',
+            'dsr_number' => (string) $nextDsrNumber,
         ]);
 
         // Auto-seed opening meter readings from each nozzle's last known readings.

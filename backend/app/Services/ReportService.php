@@ -7,7 +7,6 @@ use App\Models\DailySalesRecord;
 use App\Models\Delivery;
 use App\Models\Shift;
 use App\Models\Station;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ReportService
@@ -62,6 +61,21 @@ class ReportService
      */
     public function creditCustomerStatement(CreditCustomer $customer, string $from, string $to): array
     {
+        $salesBefore = $customer->creditSales()
+            ->whereHas('shift', fn($q) => $q->where('shift_date', '<', $from))
+            ->sum('total_value');
+
+        $paymentsBefore = $customer->payments()
+            ->where('payment_date', '<', $from)
+            ->sum('amount');
+
+        $broughtForward = round(
+            (float) ($customer->initial_opening_balance ?? 0)
+            + (float) $salesBefore
+            - (float) $paymentsBefore,
+            2
+        );
+
         $sales = $customer->creditSales()
             ->whereHas('shift', fn($q) => $q->whereBetween('shift_date', [$from, $to]))
             ->with(['product', 'shift'])
@@ -93,7 +107,7 @@ class ReportService
 
         $transactions = $sales->merge($payments)->sortBy('date')->values();
 
-        $runningBalance = 0.0;
+        $runningBalance = $broughtForward;
         foreach ($transactions as &$txn) {
             $runningBalance -= $txn['amount']; // sales are negative credits
             $txn['balance'] = round($runningBalance, 2);
@@ -103,6 +117,7 @@ class ReportService
             'customer'     => $customer->only(['id', 'customer_name', 'phone', 'credit_limit']),
             'from'         => $from,
             'to'           => $to,
+            'brought_forward' => $broughtForward,
             'transactions' => $transactions->toArray(),
             'balance'      => $customer->balance,
         ];

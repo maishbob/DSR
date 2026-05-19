@@ -19,6 +19,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\StationController;
 use App\Http\Controllers\StockTransactionController;
+use App\Http\Controllers\UserController;
 use App\Http\Controllers\TankDipController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -57,12 +58,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/station/import/oil-stock', [ImportController::class, 'importOilStock'])->name('station.import.oil-stock');
     Route::post('/station/import/oil-sales', [ImportController::class, 'importOilSales'])->name('station.import.oil-sales');
 
-    // Shifts
-    Route::get('/shifts', [ShiftController::class, 'index'])->name('shifts.index');
+    // Shifts — index redirects to DSR list (shift = DSR)
+    Route::get('/shifts', fn() => redirect()->route('dsr.index'))->name('shifts.index');
     Route::post('/shifts', [ShiftController::class, 'store'])->name('shifts.store');
     Route::get('/shifts/{shift}', [ShiftController::class, 'show'])->name('shifts.show');
+    Route::delete('/shifts/{shift}', [ShiftController::class, 'destroy'])->name('shifts.destroy');
     Route::post('/shifts/{shift}/generate-dsr', [ShiftController::class, 'generateDsr'])->name('shifts.generate-dsr');
     Route::patch('/shifts/{shift}/cash', [ShiftController::class, 'updateCash'])->name('shifts.update-cash');
+    Route::post('/shifts/{shift}/unlock', [ShiftController::class, 'unlock'])->name('shifts.unlock');
 
     // Meter readings
     Route::post('/shifts/{shift}/meter-readings', [MeterReadingController::class, 'store'])->name('meter-readings.store');
@@ -90,6 +93,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/credits/{creditCustomer}', [CreditCustomerController::class, 'show'])->name('credits.show');
     Route::put('/credits/{creditCustomer}', [CreditCustomerController::class, 'update'])->name('credits.update');
     Route::post('/credit-sales', [CreditCustomerController::class, 'storeSale'])->name('credit-sales.store');
+    Route::put('/credit-sales/{creditSale}', [CreditCustomerController::class, 'updateSale'])->name('credit-sales.update');
     Route::delete('/credit-sales/{creditSale}', [CreditCustomerController::class, 'destroySale'])->name('credit-sales.destroy');
     Route::post('/credits/{creditCustomer}/payments', [CreditCustomerController::class, 'storePayment'])->name('credits.payments.store');
 
@@ -130,6 +134,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // DSR
     Route::get('/dsr', [DsrController::class, 'index'])->name('dsr.index');
+    Route::get('/dsr/number/{dsrNumber}', [DsrController::class, 'viewByDsrNumber'])->name('dsr.view-by-number');
     Route::get('/dsr/{dsr}', [DsrController::class, 'show'])->name('dsr.show');
     Route::post('/dsr/{dsr}/approve', [DsrController::class, 'approve'])->name('dsr.approve');
     Route::post('/dsr/{dsr}/reopen', [DsrController::class, 'reopen'])->name('dsr.reopen');
@@ -145,6 +150,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/variance', [ReportController::class, 'varianceReport'])->name('reports.variance');
     Route::get('/reports/dsr-income', [ReportController::class, 'dsrIncome'])->name('reports.dsr-income');
     Route::get('/reports/credit/{creditCustomer}', [ReportController::class, 'creditStatement'])->name('reports.credit-statement');
+
+    // User management (manager+)
+    Route::get('/station/users', [UserController::class, 'index'])->name('users.index');
+    Route::post('/station/users', [UserController::class, 'store'])->name('users.store');
+    Route::put('/station/users/{user}', [UserController::class, 'update'])->name('users.update');
+    Route::delete('/station/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
 
     // Profile (Breeze default)
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

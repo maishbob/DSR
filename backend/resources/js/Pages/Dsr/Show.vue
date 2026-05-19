@@ -266,6 +266,41 @@ function print() {
             </table>
         </div>
 
+        <!-- Oil / Shop Product Sales -->
+        <div v-if="dsr.shift?.oil_sales?.length" class="bg-white rounded-xl shadow-sm overflow-hidden mb-6 print:shadow-none">
+            <div class="p-5 border-b border-gray-100">
+                <h2 class="font-semibold text-gray-700">Oil / Shop Product Sales</h2>
+            </div>
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-gray-500 font-medium">Item</th>
+                        <th class="px-4 py-3 text-right text-gray-500 font-medium">Opening Stock</th>
+                        <th class="px-4 py-3 text-right text-gray-500 font-medium">Qty Sold</th>
+                        <th class="px-4 py-3 text-right text-gray-500 font-medium">Closing Stock</th>
+                        <th class="px-4 py-3 text-right text-gray-500 font-medium">Unit Price</th>
+                        <th class="px-4 py-3 text-right text-gray-500 font-medium">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="sale in dsr.shift.oil_sales" :key="sale.id" class="border-t border-gray-100">
+                        <td class="px-4 py-3 font-medium text-gray-800">{{ sale.shop_product?.product_name }}</td>
+                        <td class="px-4 py-3 text-right font-mono">{{ sale.opening_stock ?? '—' }}</td>
+                        <td class="px-4 py-3 text-right font-mono">{{ sale.quantity }}</td>
+                        <td class="px-4 py-3 text-right font-mono">{{ sale.closing_stock ?? '—' }}</td>
+                        <td class="px-4 py-3 text-right font-mono">{{ fmt(sale.unit_price, 2) }}</td>
+                        <td class="px-4 py-3 text-right font-mono font-semibold text-green-700">{{ fmt(sale.total_value, 2) }}</td>
+                    </tr>
+                    <tr class="border-t-2 border-gray-300 bg-gray-50 font-semibold">
+                        <td class="px-4 py-3 text-gray-700" colspan="5">Total Oil / Shop Sales</td>
+                        <td class="px-4 py-3 text-right text-green-700">
+                            {{ fmt(dsr.shift.oil_sales.reduce((s, r) => s + Number(r.total_value ?? 0), 0), 2) }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
         <!-- Adjustments (if locked) -->
         <div v-if="dsr.locked">
             <!-- Add adjustment form -->

@@ -8,6 +8,7 @@ use App\Models\Payment;
 use App\Models\Shift;
 use App\Services\AuditService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -186,6 +187,47 @@ class CreditCustomerController extends Controller
         return back()->with('success', 'Credit sale recorded.');
     }
 
+    // Update a credit sale
+    public function updateSale(Request $request, CreditSale $creditSale)
+    {
+        $station = $request->user()->station;
+        abort_unless($creditSale->shift?->station_id === $station->id, 403);
+
+        $shift = $creditSale->shift;
+        if ($shift?->isLocked()) abort(403, 'Shift is locked.');
+
+        $validated = $request->validate([
+            'product_id'    => ['required', Rule::exists('products', 'id')->where('station_id', $station->id)],
+            'type'          => 'nullable|in:fuel,oil,other',
+            'quantity'      => 'required|numeric|min:0',
+            'price_applied' => 'required|numeric|min:0',
+            'total_value'   => 'required|numeric|min:0.01',
+            'vehicle_plate' => 'nullable|string|max:20',
+            'notes'         => 'nullable|string',
+        ]);
+
+        $explicitTotal = (float) $validated['total_value'];
+        unset($validated['total_value']);
+
+        $before = $creditSale->toArray();
+        $creditSale->update($validated); // observer recalculates qty×price; we override below
+
+        // Always write the user-entered total directly to bypass observer precision issues
+        $vatRate = (float) ($station->vat_rate ?? 0.16);
+        $whtRate = (float) ($station->wht_rate ?? 0.0172);
+        $net     = $explicitTotal / (1 + $vatRate);
+
+        DB::table('credit_sales')->where('id', $creditSale->id)->update([
+            'total_value' => round($explicitTotal, 2),
+            'vat_amount'  => round($explicitTotal - $net, 2),
+            'wht_amount'  => round($explicitTotal * $whtRate, 2),
+        ]);
+
+        $this->audit->log('updated', $creditSale, $before, $creditSale->fresh()->toArray(), $station->id);
+
+        return back()->with('success', 'Credit sale updated.');
+    }
+
     // Delete a credit sale
     public function destroySale(CreditSale $creditSale)
     {
@@ -207,9 +249,19 @@ class CreditCustomerController extends Controller
             'trans_type'     => 'nullable|in:receipts,fuel,lpg,pos,invoice',
             'amount'         => 'required|numeric|min:0.01',
             'payment_method' => 'nullable|in:cash,mpesa,bank_transfer,cheque,rtgs,equity_card,other',
+            'shift_id'       => ['nullable', Rule::exists('shifts', 'id')->where('station_id', $creditCustomer->station_id)],
             'reference'      => 'nullable|string|max:100',
             'notes'          => 'nullable|string',
         ]);
+
+        if (!empty($validated['shift_id'])) {
+            $shift = Shift::findOrFail($validated['shift_id']);
+            if ($shift->shift_date->toDateString() !== $validated['payment_date']) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['shift_id' => 'Selected shift date must match the payment date.']);
+            }
+        }
 
         $payment = Payment::create(array_merge($validated, [
             'credit_customer_id' => $creditCustomer->id,

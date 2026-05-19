@@ -9,9 +9,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Payment extends Model
 {
     use BelongsToStation;
+
     protected $fillable = [
         'credit_customer_id',
         'station_id',
+        'shift_id',
         'payment_date',
         'receipt_no',
         'trans_type',
@@ -37,6 +39,11 @@ class Payment extends Model
     public function creditCustomer(): BelongsTo
     {
         return $this->belongsTo(CreditCustomer::class);
+    }
+
+    public function shift(): BelongsTo
+    {
+        return $this->belongsTo(Shift::class);
     }
 
     public function receivedBy(): BelongsTo

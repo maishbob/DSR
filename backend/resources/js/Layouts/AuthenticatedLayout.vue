@@ -76,10 +76,9 @@ const navGroups = computed(() => {
     {
         label: 'Operations',
         items: [
-            { label: 'Dashboard',   route: 'dashboard',        icon: 'home' },
-            { label: 'Shifts',      route: 'shifts.index',     icon: 'clock' },
-            { label: 'Deliveries',  route: 'deliveries.index', icon: 'truck' },
-            { label: 'DSR Records', route: 'dsr.index',        icon: 'chart' },
+            { label: 'Dashboard',          route: 'dashboard',        icon: 'home' },
+            { label: 'Daily Sales Records', route: 'dsr.index',        icon: 'chart' },
+            { label: 'Deliveries',         route: 'deliveries.index', icon: 'truck' },
         ],
     },
     {
@@ -107,7 +106,10 @@ const navGroups = computed(() => {
         label: 'Settings',
         items: [
             { label: 'Station Settings', route: 'station.settings', icon: 'cog' },
-            ...(isManager.value ? [{ label: 'Audit Log', route: 'audit-log.index', icon: 'history' }] : []),
+            ...(isManager.value ? [
+                { label: 'Users', route: 'users.index', icon: 'users' },
+                { label: 'Audit Log', route: 'audit-log.index', icon: 'history' },
+            ] : []),
             { label: 'Import Legacy Data', route: 'station.import', icon: 'upload' },
         ],
     },

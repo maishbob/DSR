@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -19,11 +20,17 @@ return new class extends Migration
         });
 
         // Back-fill station_id from the credit_customer
-        \DB::statement('
-            UPDATE payments p
-            JOIN credit_customers cc ON cc.id = p.credit_customer_id
-            SET p.station_id = cc.station_id
-        ');
+        if (Schema::getConnection()->getDriverName() === 'sqlite') {
+            DB::table('payments')->update([
+                'station_id' => DB::raw('(SELECT station_id FROM credit_customers WHERE credit_customers.id = payments.credit_customer_id)'),
+            ]);
+        } else {
+            DB::statement('
+                UPDATE payments p
+                JOIN credit_customers cc ON cc.id = p.credit_customer_id
+                SET p.station_id = cc.station_id
+            ');
+        }
     }
 
     public function down(): void

@@ -2,8 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Expense;
-use App\Models\OilSale;
 use App\Models\Payment;
 use App\Models\Shift;
 
@@ -41,11 +39,8 @@ use App\Models\Shift;
  * 3. MPESA (mobile money) is captured as a shift-level total (shifts.mpesa_amount),
  *    not per-transaction. It is a non-cash channel and reduces the expected fuel cash.
  *
- * 4. Cash payments from credit customers are matched by station_id + payment_date.
- *    Rationale: payments table has no shift_id, only payment_date. This means
- *    payments entered on the same calendar date as the shift are included.
- *    If a station runs two shifts on the same day, cash payments are attributed
- *    to whichever shift is reconciled first. This is a known limitation.
+ * 4. Cash payments from credit customers are matched by shift_id when available.
+ *    Legacy rows without shift_id fall back to station_id + payment_date.
  *
  * 5. Fuel price used is the price active at the time of the shift date.
  *    If no price is set, fuel revenue is zero and a zero-price flag is returned.
@@ -138,10 +133,16 @@ class CashReconciliationService
         );
 
         // ── Cash payments received from credit customers ─────────────────────
-        // Matched by station_id + payment_date (payments has no shift_id)
+        // Prefer shift-linked rows. Legacy rows without shift_id fall back to same-date matching.
         $cashPaymentsReceived = round(
             (float)Payment::where('station_id', $shift->station_id)
-                ->whereDate('payment_date', $shiftDate)
+                ->where(function ($q) use ($shift, $shiftDate) {
+                    $q->where('shift_id', $shift->id)
+                        ->orWhere(function ($legacy) use ($shiftDate) {
+                            $legacy->whereNull('shift_id')
+                                ->whereDate('payment_date', $shiftDate);
+                        });
+                })
                 ->where('payment_method', 'cash')
                 ->sum('amount'),
             2

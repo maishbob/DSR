@@ -219,11 +219,12 @@ class ImportController extends Controller
             $key = $date->format('Y-m-d');
             $byDate[$key][] = [
                 'date'       => $date,
-                'dsr_number' => str_replace(',', '', trim($row['Daily Record Id'] ?? '')),
+                'dsr_number' => preg_replace('/[^0-9]/', '', trim($row['Daily Record Id'] ?? '')),
             ];
         }
 
         $created = 0;
+        $updated = 0;
         $skipped = 0;
 
         DB::beginTransaction();
@@ -245,13 +246,19 @@ class ImportController extends Controller
                 foreach ($unique as $idx => $entry) {
                     $shiftType = $idx === 0 ? 'day' : 'night';
 
-                    $exists = Shift::where('station_id', $station->id)
+                    $existing = Shift::where('station_id', $station->id)
                         ->where('shift_date', $dateKey)
                         ->where('shift_type', $shiftType)
-                        ->exists();
+                        ->first();
 
-                    if ($exists) {
-                        $skipped++;
+                    if ($existing) {
+                        // Backfill dsr_number on phantom shifts (created by credit import without one)
+                        if ($existing->dsr_number === null && $entry['dsr_number'] !== '') {
+                            $existing->update(['dsr_number' => $entry['dsr_number']]);
+                            $updated++;
+                        } else {
+                            $skipped++;
+                        }
                         continue;
                     }
 
@@ -279,8 +286,8 @@ class ImportController extends Controller
             return back()->with('error', 'Shift import failed: ' . $e->getMessage());
         }
 
-        return back()->with('success', "Shifts: {$created} created, {$skipped} skipped.")
-            ->with('importStats', ['created' => $created, 'skipped' => $skipped]);
+        return back()->with('success', "Shifts: {$created} created, {$updated} dsr_numbers backfilled, {$skipped} skipped.")
+            ->with('importStats', ['created' => $created, 'updated' => $updated, 'skipped' => $skipped]);
     }
 
     // ── Step 5: Daily Pump Readings ──────────────────────────────
@@ -637,21 +644,28 @@ class ImportController extends Controller
             ->mapWithKeys(fn($id, $name) => [strtolower($name) => $id])
             ->toArray();
 
-        // Build lookup: dsr_number → shift_id
+        // Build lookup: dsr_number → shift_id (digits-only keys to survive CSV comma-formatting)
         $shiftMap = Shift::where('station_id', $station->id)
             ->whereNotNull('dsr_number')
-            ->pluck('id', 'dsr_number')
+            ->get(['id', 'dsr_number'])
+            ->mapWithKeys(fn($s) => [preg_replace('/[^0-9]/', '', $s->dsr_number) => $s->id])
             ->toArray();
 
         $created = 0;
         $skipped = 0;
+        $noShift = 0;
         $batch = [];
 
         DB::beginTransaction();
         try {
+            // Delete existing oil sales for this station so reimport is idempotent
+            $shiftIds = Shift::where('station_id', $station->id)->pluck('id');
+            DB::table('oil_sales')->whereIn('shift_id', $shiftIds)->delete();
+
             foreach ($rows as $row) {
                 $itemName      = trim($row['Itemname'] ?? '');
-                $dailyRecordId = trim($row['Dailyrecordid'] ?? '');
+                // Strip commas/spaces — Clarion formats numbers as "3,435"
+                $dailyRecordId = preg_replace('/[^0-9]/', '', trim($row['Dailyrecordid'] ?? ''));
                 $salesQty      = (float) trim($row['Salesqty'] ?? '0');
 
                 if ($itemName === '' || $dailyRecordId === '') {
@@ -662,8 +676,12 @@ class ImportController extends Controller
                 $shopProductId = $productMap[strtolower($itemName)] ?? null;
                 $shiftId       = $shiftMap[$dailyRecordId] ?? null;
 
-                if (! $shopProductId || ! $shiftId) {
+                if (! $shopProductId) {
                     $skipped++;
+                    continue;
+                }
+                if (! $shiftId) {
+                    $noShift++;
                     continue;
                 }
                 if ($salesQty == 0) {
@@ -701,8 +719,13 @@ class ImportController extends Controller
             return back()->with('error', 'Oil sales import failed: ' . $e->getMessage());
         }
 
-        return back()->with('success', "Oil sales: {$created} created, {$skipped} skipped.")
-            ->with('importStats', ['created' => $created, 'skipped' => $skipped]);
+        $msg = "Oil sales: {$created} imported, {$skipped} skipped (zero qty / unknown product)";
+        if ($noShift > 0) {
+            $msg .= ", {$noShift} skipped (DSR number not found — re-upload shifts CSV first if this is high)";
+        }
+
+        return back()->with('success', $msg)
+            ->with('importStats', ['created' => $created, 'skipped' => $skipped, 'no_shift' => $noShift]);
     }
 
     // ── Shared helpers ───────────────────────────────────────────

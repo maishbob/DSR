@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CreditSale;
+use App\Models\MeterReading;
 use App\Models\Shift;
+use App\Models\TankDip;
 use App\Services\CashReconciliationService;
 use App\Services\DsrService;
 use App\Services\ShiftService;
@@ -29,9 +32,11 @@ class ShiftController extends Controller
             ->addSelect([
                 'fuel_sales_total' => DB::table('meter_readings')
                     ->join('pump_nozzles', 'pump_nozzles.id', '=', 'meter_readings.nozzle_id')
-                    ->join('price_histories', function ($join) {
-                        $join->on('price_histories.product_id', '=', 'pump_nozzles.product_id')
-                            ->whereNull('price_histories.effective_to');
+                    ->join('price_histories', 'price_histories.product_id', '=', 'pump_nozzles.product_id')
+                    ->whereColumn('price_histories.effective_from', '<=', 'shifts.shift_date')
+                    ->where(function ($q) {
+                        $q->whereNull('price_histories.effective_to')
+                            ->orWhereColumn('price_histories.effective_to', '>=', 'shifts.shift_date');
                     })
                     ->whereColumn('meter_readings.shift_id', 'shifts.id')
                     ->selectRaw('SUM(meter_readings.litres_sold * price_histories.price_per_litre)')
@@ -63,14 +68,19 @@ class ShiftController extends Controller
         ]);
 
         $station = $request->user()->station;
-        $shift = $this->shiftService->openShift(
-            $station,
-            $validated['shift_type'],
-            $validated['shift_date']
-        );
 
-        return redirect()->route('shifts.show', $shift)
-            ->with('success', 'Shift opened successfully.');
+        try {
+            $shift = $this->shiftService->openShift(
+                $station,
+                $validated['shift_type'],
+                $validated['shift_date']
+            );
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['shift_date' => $e->getMessage()]);
+        }
+
+        return redirect()->route('dsr.view-by-number', $shift->dsr_number)
+            ->with('success', 'DSR opened successfully.');
     }
 
     public function show(Shift $shift): Response
@@ -98,7 +108,8 @@ class ShiftController extends Controller
             'pumpNozzles.product',
             'pumpNozzles.tank',
             'shopProducts',
-            'creditCustomers',
+            'creditCustomers' => fn($q) => $q->withSum('creditSales', 'total_value')
+                                              ->withSum('payments', 'amount'),
         ])->first();
 
         return Inertia::render('Shifts/Show', [
@@ -146,6 +157,30 @@ class ShiftController extends Controller
         return back()->with('success', 'Cash count saved.');
     }
 
+    public function destroy(Request $request, Shift $shift)
+    {
+        abort_unless($request->user()->isManager(), 403, 'Only managers can delete DSRs.');
+        $this->checkShiftAccess($shift);
+
+        $hasRecords = $shift->meterReadings()->exists()
+            || $shift->oilSales()->exists()
+            || $shift->creditSales()->exists()
+            || $shift->expenses()->exists()
+            || $shift->cardPayments()->exists()
+            || $shift->posTransactions()->exists()
+            || $shift->deliveries()->exists()
+            || $shift->tankDips()->exists()
+            || $shift->dailySalesRecord()->exists();
+
+        if ($hasRecords) {
+            return back()->withErrors(['delete' => 'Cannot delete a DSR that has records.']);
+        }
+
+        $shift->delete();
+
+        return redirect()->route('dsr.index')->with('success', 'DSR deleted.');
+    }
+
     public function generateDsr(Request $request, Shift $shift)
     {
         $this->checkShiftAccess($shift);
@@ -154,6 +189,53 @@ class ShiftController extends Controller
 
         return redirect()->route('dsr.show', $dsr)
             ->with('success', 'DSR generated successfully.');
+    }
+
+    /**
+     * Unlock a locked shift. Manager-only.
+     *
+     * If a DSR record exists, delegates to DsrService::reopenDsr so all
+     * ledger entries and approval fields are cleaned up properly.
+     * For legacy shifts with no DSR record, unlocks records directly.
+     */
+    public function unlock(Request $request, Shift $shift)
+    {
+        abort_unless($request->user()->isManager(), 403, 'Only managers can unlock shifts.');
+        $this->checkShiftAccess($shift);
+
+        if (!$shift->isLocked()) {
+            return back()->withErrors(['unlock' => 'This shift is not locked.']);
+        }
+
+        $validated = $request->validate([
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        $dsr = $shift->dailySalesRecord;
+
+        if ($dsr) {
+            $this->dsrService->reopenDsr($dsr, $validated['reason']);
+        } else {
+            DB::transaction(function () use ($shift) {
+                MeterReading::where('shift_id', $shift->id)->update(['is_locked' => false]);
+                TankDip::where('shift_id', $shift->id)->update(['is_locked' => false]);
+                CreditSale::where('shift_id', $shift->id)->update(['is_locked' => false]);
+                $shift->update(['status' => 'open']);
+            });
+        }
+
+        \App\Models\AuditLog::create([
+            'user_id'    => $request->user()->id,
+            'station_id' => $shift->station_id,
+            'action'     => 'shift_unlocked',
+            'model_type' => 'Shift',
+            'model_id'   => $shift->id,
+            'old_values' => null,
+            'new_values' => ['reason' => $validated['reason']],
+            'ip_address' => $request->ip(),
+        ]);
+
+        return back()->with('success', 'Shift unlocked. Make your corrections, then regenerate and re-approve the DSR.');
     }
 
     // -------------------------------------------------------------------------
