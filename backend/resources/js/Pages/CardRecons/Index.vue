@@ -59,9 +59,33 @@ const lineForm = useForm({
     amount:     '',
 });
 
+// ── Edit line ────────────────────────────────────────────────
+const editingLineId = ref(null);
+const editLineForm  = useForm({ trans_date: '', ref: '', amount: '' });
+
+function startEditLine(line) {
+    editingLineId.value = line.id;
+    editLineForm.trans_date = line.trans_date?.slice(0, 10) ?? '';
+    editLineForm.ref        = line.ref ?? '';
+    editLineForm.amount     = line.amount;
+}
+
+function cancelEditLine() {
+    editingLineId.value = null;
+    editLineForm.reset();
+}
+
+function submitEditLine(line) {
+    editLineForm.put(route('card-recon-lines.update', line.id), {
+        preserveScroll: true,
+        onSuccess: () => { editingLineId.value = null; },
+    });
+}
+
 function openEdit(r) {
-    editTarget.value = r;
-    editLines.value  = r.lines ?? [];
+    editTarget.value    = r;
+    editLines.value     = r.lines ?? [];
+    editingLineId.value = null;
     editForm.card_name  = r.card_name;
     editForm.batch_ref  = r.batch_ref ?? '';
     editForm.recon_date = r.recon_date?.slice(0, 10) ?? '';
@@ -287,19 +311,64 @@ const cardColor = {
                         </thead>
                         <tbody>
                             <tr v-for="line in editLines" :key="line.id"
-                                class="border-t border-gray-100 hover:bg-gray-50">
-                                <td class="px-3 py-2 text-gray-600">{{ fmtDate(line.trans_date) }}</td>
-                                <td class="px-3 py-2 font-mono text-gray-700">{{ line.ref ?? '—' }}</td>
-                                <td class="px-3 py-2 text-right font-medium text-gray-800">{{ fmt(line.amount) }}</td>
-                                <td class="px-3 py-2 text-right">
-                                    <button @click="deleteLine(line)"
-                                        aria-label="Delete recon line"
-                                        class="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
-                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                    </button>
-                                </td>
+                                class="border-t border-gray-100">
+                                <!-- View row -->
+                                <template v-if="editingLineId !== line.id">
+                                    <td class="px-3 py-2 text-gray-600">{{ fmtDate(line.trans_date) }}</td>
+                                    <td class="px-3 py-2 font-mono text-gray-700">{{ line.ref ?? '—' }}</td>
+                                    <td class="px-3 py-2 text-right font-medium text-gray-800">{{ fmt(line.amount) }}</td>
+                                    <td class="px-3 py-2 text-right">
+                                        <div class="flex justify-end gap-1">
+                                            <button @click="startEditLine(line)"
+                                                aria-label="Edit recon line"
+                                                class="p-1 rounded text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                            <button @click="deleteLine(line)"
+                                                aria-label="Delete recon line"
+                                                class="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </template>
+                                <!-- Edit row -->
+                                <template v-else>
+                                    <td class="px-2 py-1.5">
+                                        <input type="date" v-model="editLineForm.trans_date" required
+                                            class="w-full border border-blue-300 rounded px-2 py-1 text-sm" />
+                                    </td>
+                                    <td class="px-2 py-1.5">
+                                        <input type="text" v-model="editLineForm.ref"
+                                            class="w-full border border-blue-300 rounded px-2 py-1 text-sm font-mono" />
+                                    </td>
+                                    <td class="px-2 py-1.5">
+                                        <input type="number" v-model="editLineForm.amount" step="0.01" min="0.01" required
+                                            class="w-full border border-blue-300 rounded px-2 py-1 text-sm text-right" />
+                                    </td>
+                                    <td class="px-2 py-1.5">
+                                        <div class="flex justify-end gap-1">
+                                            <button @click="submitEditLine(line)" :disabled="editLineForm.processing"
+                                                aria-label="Save"
+                                                class="p-1 rounded text-green-600 hover:bg-green-50 disabled:opacity-50 transition-colors">
+                                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </button>
+                                            <button @click="cancelEditLine()"
+                                                aria-label="Cancel"
+                                                class="p-1 rounded text-gray-400 hover:bg-gray-100 transition-colors">
+                                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </template>
                             </tr>
                             <tr v-if="!editLines.length">
                                 <td colspan="4" class="px-3 py-4 text-center text-gray-400 text-xs">

@@ -18,6 +18,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\StationController;
+use App\Http\Controllers\StockController;
 use App\Http\Controllers\StockTransactionController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\TankDipController;
@@ -111,6 +112,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/card-recons/{cardRecon}', [CardReconController::class, 'update'])->name('card-recons.update');
     Route::delete('/card-recons/{cardRecon}', [CardReconController::class, 'destroy'])->name('card-recons.destroy');
     Route::post('/card-recons/{cardRecon}/lines', [CardReconController::class, 'storeLine'])->name('card-recon-lines.store');
+    Route::put('/card-recon-lines/{cardReconLine}', [CardReconController::class, 'updateLine'])->name('card-recon-lines.update');
     Route::delete('/card-recon-lines/{cardReconLine}', [CardReconController::class, 'destroyLine'])->name('card-recon-lines.destroy');
 
     // POS transactions
@@ -127,6 +129,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/station/nozzles', [StationController::class, 'storeNozzle'])->name('station.nozzles.store');
     Route::put('/station/nozzles/{nozzle}', [StationController::class, 'updateNozzle'])->name('station.nozzles.update');
     Route::delete('/station/nozzles/{nozzle}', [StationController::class, 'destroyNozzle'])->name('station.nozzles.destroy');
+    Route::put('/station/settings/rates', [StationController::class, 'updateRates'])->name('station.settings.rates');
+    Route::put('/station/settings/period', [StationController::class, 'updatePeriod'])->name('station.settings.period');
+    Route::get('/stock', [StockController::class, 'index'])->name('stock.index');
+    Route::get('/stock/{shopProduct}/oil-sales', [StockController::class, 'oilSalesHistory'])->name('stock.oil-sales');
     Route::post('/station/shop-products', [StationController::class, 'storeShopProduct'])->name('station.shop-products.store');
     Route::put('/station/shop-products/{shopProduct}', [StationController::class, 'updateShopProduct'])->name('station.shop-products.update');
     Route::post('/station/shop-products/{shopProduct}/transactions', [StockTransactionController::class, 'store'])->name('stock-transactions.store');

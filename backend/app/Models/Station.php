@@ -16,12 +16,16 @@ class Station extends Model
         'is_active',
         'vat_rate',
         'wht_rate',
+        'period_from',
+        'period_to',
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
-        'vat_rate'  => 'decimal:4',
-        'wht_rate'  => 'decimal:4',
+        'is_active'   => 'boolean',
+        'vat_rate'    => 'decimal:4',
+        'wht_rate'    => 'decimal:4',
+        'period_from' => 'date',
+        'period_to'   => 'date',
     ];
 
     public function owner(): BelongsTo

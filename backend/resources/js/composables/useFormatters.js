@@ -23,9 +23,8 @@ export function fmtReading(n, dec = 3) {
 
 export function fmtDate(d) {
     if (!d) return '—';
-    const dt = new Date(d);
-    const dd = String(dt.getDate()).padStart(2, '0');
-    const mm = String(dt.getMonth() + 1).padStart(2, '0');
-    const yyyy = dt.getFullYear();
+    const s = String(d).slice(0, 10); // "YYYY-MM-DD" from any ISO string
+    const [yyyy, mm, dd] = s.split('-');
+    if (!yyyy || !mm || !dd) return '—';
     return `${dd}/${mm}/${yyyy}`;
 }

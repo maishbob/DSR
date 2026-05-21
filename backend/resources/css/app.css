@@ -122,3 +122,36 @@
         @apply bg-clip-text text-transparent bg-gradient-to-r from-orange-500 to-amber-500;
     }
 }
+
+@media print {
+    /* Hide layout chrome */
+    aside,
+    header { display: none !important; }
+
+    /* Remove sidebar indent */
+    .lg\:ml-64 { margin-left: 0 !important; }
+
+    /* Tight page margins */
+    main { padding: 0.4cm 0.6cm !important; }
+
+    /* Compact tables */
+    table { font-size: 9pt !important; }
+    table td,
+    table th {
+        padding-top: 2px !important;
+        padding-bottom: 2px !important;
+        line-height: 1.35 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+    }
+
+    /* Clamp description column so it doesn't blow out the page */
+    table td:nth-child(2) { max-width: 220px; text-overflow: ellipsis !important; }
+
+    /* No page break inside a row */
+    tr { page-break-inside: avoid; }
+
+    /* Tailwind print variants */
+    .print\:hidden { display: none !important; }
+    .print\:block  { display: block  !important; }
+}

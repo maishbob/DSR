@@ -79,6 +79,7 @@ const navGroups = computed(() => {
             { label: 'Dashboard',          route: 'dashboard',        icon: 'home' },
             { label: 'Daily Sales Records', route: 'dsr.index',        icon: 'chart' },
             { label: 'Deliveries',         route: 'deliveries.index', icon: 'truck' },
+            { label: 'Stock',              route: 'stock.index',      icon: 'receipt' },
         ],
     },
     {

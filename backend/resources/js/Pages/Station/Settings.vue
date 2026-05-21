@@ -1,15 +1,62 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ConfirmModal from '@/Components/ConfirmModal.vue';
-import { Head, useForm, router } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { Head, useForm, router, Link } from '@inertiajs/vue3';
+import { ref, computed, watch } from 'vue';
 import { fmt, fmtDate, fmtReading } from '@/composables/useFormatters';
 
 const props = defineProps({
-    station: Object,
+    station:      Object,
+    shopProducts: Object,
+    shopFilters:  Object,
 });
 
-const tab = ref('pumps');
+const tab = ref('general');
+
+// ── General: tax rates ────────────────────────────────────────
+const ratesForm = useForm({
+    vat_rate: props.station.vat_rate != null ? +(Number(props.station.vat_rate) * 100).toFixed(4) : 16,
+    wht_rate: props.station.wht_rate != null ? +(Number(props.station.wht_rate) * 100).toFixed(4) : '',
+});
+function saveRates() {
+    ratesForm.put(route('station.settings.rates'));
+}
+
+// ── General: billing period ───────────────────────────────────
+const periodForm = useForm({
+    period_from: props.station.period_from ?? '',
+    period_to:   props.station.period_to   ?? '',
+});
+function savePeriod() {
+    periodForm.put(route('station.settings.period'));
+}
+
+// ── Shop product search & pagination ──────────────────────────
+const shopSearch  = ref(props.shopFilters?.search   ?? '');
+const shopPerPage = ref(props.shopFilters?.per_page ?? 20);
+
+function applyShopFilters() {
+    const params = {};
+    if (shopSearch.value)        params.shop_search   = shopSearch.value;
+    if (shopPerPage.value !== 20) params.shop_per_page = shopPerPage.value;
+    router.get(route('station.settings'), params, {
+        only: ['shopProducts', 'shopFilters'],
+        preserveState: true,
+        replace: true,
+    });
+}
+
+let shopSearchTimer = null;
+watch(shopSearch, () => {
+    clearTimeout(shopSearchTimer);
+    shopSearchTimer = setTimeout(applyShopFilters, 350);
+});
+watch(shopPerPage, applyShopFilters);
+
+// Numbered page links (strip the Prev/Next wrapper entries Laravel adds)
+const shopPageLinks = computed(() =>
+    (props.shopProducts?.links ?? []).slice(1, -1)
+);
 
 // ── Confirm modal ─────────────────────────────────────────────
 const confirmModal = ref({ show: false, title: '', message: '', variant: 'danger', onConfirm: () => {} });
@@ -207,7 +254,6 @@ function addShopProduct() {
 
 const editingShopProduct  = ref(null);
 const showShopModal       = ref(false);
-const shopModalTab        = ref('stock');   // 'stock' | 'sales'
 
 const shopEditForm = useForm({
     product_name: '', unit: 'unit', current_price: '',
@@ -231,7 +277,6 @@ function openEditShop(sp) {
     shopEditForm.forecourt_stock = sp.forecourt_stock;
     shopEditForm.store_stock     = sp.store_stock;
     shopEditForm.is_active       = sp.is_active;
-    shopModalTab.value = 'stock';
     showShopModal.value = true;
 }
 
@@ -261,9 +306,6 @@ function totalByType(sp, type) {
         .reduce((s, t) => s + Number(t.quantity), 0);
 }
 
-function salesTotal(sp) {
-    return (sp.oil_sales ?? []).reduce((s, t) => s + Number(t.quantity), 0);
-}
 
 </script>
 
@@ -279,12 +321,87 @@ function salesTotal(sp) {
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
 
                 <div class="flex border-b border-gray-200 mb-6">
-                    <button v-for="t in ['pumps', 'tanks', 'products', 'prices', 'shop']" :key="t"
+                    <button v-for="t in ['general', 'pumps', 'tanks', 'products', 'prices', 'shop']" :key="t"
                         @click="tab = t"
                         class="px-5 py-2 text-sm font-medium border-b-2 -mb-px"
                         :class="tab === t ? 'border-orange-500 text-orange-500' : 'border-transparent text-gray-500 hover:text-gray-700'">
-                        {{ { pumps: 'Pumps', tanks: 'Tanks', products: 'Products', prices: 'Fuel Prices', shop: 'Shop Products' }[t] }}
+                        {{ { general: 'General', pumps: 'Pumps', tanks: 'Tanks', products: 'Products', prices: 'Fuel Prices', shop: 'Shop Products' }[t] }}
                     </button>
+                </div>
+
+                <!-- ── GENERAL ──────────────────────────────────────────── -->
+                <div v-if="tab === 'general'" class="space-y-6">
+
+                    <!-- Owner / station header -->
+                    <div class="bg-white rounded-xl shadow-sm p-5">
+                        <div class="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Owner</div>
+                        <div class="text-lg font-semibold text-gray-800">{{ station.owner?.name }}</div>
+                        <div class="text-sm text-gray-500 mt-0.5">{{ station.station_name }}{{ station.location ? ' — ' + station.location : '' }}</div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+
+                        <!-- Billing Period -->
+                        <div class="bg-white rounded-xl shadow-sm p-5">
+                            <h2 class="font-semibold text-gray-700 mb-1">Current Billing Period</h2>
+                            <p class="text-xs text-gray-400 mb-4">The period used as the default date range when generating customer statements.</p>
+                            <form @submit.prevent="savePeriod" class="space-y-3">
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">From *</label>
+                                    <input type="date" v-model="periodForm.period_from" required
+                                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                                    <p v-if="periodForm.errors.period_from" class="text-xs text-red-500 mt-1">{{ periodForm.errors.period_from }}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">To *</label>
+                                    <input type="date" v-model="periodForm.period_to" required
+                                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                                    <p v-if="periodForm.errors.period_to" class="text-xs text-red-500 mt-1">{{ periodForm.errors.period_to }}</p>
+                                </div>
+                                <div class="pt-1">
+                                    <button type="submit" :disabled="periodForm.processing"
+                                        class="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60">
+                                        Save Period
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Tax Rates -->
+                        <div class="bg-white rounded-xl shadow-sm p-5">
+                            <h2 class="font-semibold text-gray-700 mb-1">Tax Rates</h2>
+                            <p class="text-xs text-gray-400 mb-4">Applied when creating new VAT transactions for this station.</p>
+                            <form @submit.prevent="saveRates" class="space-y-3">
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">Default VAT Rate (%) *</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="number" v-model="ratesForm.vat_rate" required step="0.0001" min="0" max="100"
+                                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
+                                            placeholder="16" />
+                                        <span class="text-gray-500 text-sm">%</span>
+                                    </div>
+                                    <p v-if="ratesForm.errors.vat_rate" class="text-xs text-red-500 mt-1">{{ ratesForm.errors.vat_rate }}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">Default Withholding VAT Rate (%)</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="number" v-model="ratesForm.wht_rate" step="0.0001" min="0" max="100"
+                                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
+                                            placeholder="2" />
+                                        <span class="text-gray-500 text-sm">%</span>
+                                    </div>
+                                    <p v-if="ratesForm.errors.wht_rate" class="text-xs text-red-500 mt-1">{{ ratesForm.errors.wht_rate }}</p>
+                                </div>
+                                <div class="pt-1">
+                                    <button type="submit" :disabled="ratesForm.processing"
+                                        class="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60">
+                                        Save Rates
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                    </div>
                 </div>
 
                 <!-- ── PUMPS ──────────────────────────────────────────────── -->
@@ -670,40 +787,121 @@ function salesTotal(sp) {
                         </form>
                     </div>
 
-                    <!-- Stock list — click to edit/manage -->
-                    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-                        <table class="w-full text-sm">
-                            <thead class="bg-gray-50 border-b"><tr>
-                                <th class="px-4 py-3 text-left text-gray-500">Item Name</th>
-                                <th class="px-4 py-3 text-right text-gray-500">Forecourt Stock</th>
-                                <th class="px-4 py-3 text-right text-gray-500">Store Stock</th>
-                                <th class="px-4 py-3 text-right text-gray-500">Current Stock</th>
-                                <th class="px-4 py-3 text-right text-gray-500">Price</th>
-                                <th class="px-4 py-3 text-right text-gray-500">Cost</th>
-                                <th class="px-4 py-3 text-left text-gray-500">Status</th>
-                            </tr></thead>
-                            <tbody>
-                                <tr v-for="sp in station.shop_products" :key="sp.id"
-                                    class="border-t border-gray-100 hover:bg-blue-50 cursor-pointer"
-                                    @click="openEditShop(sp)">
-                                    <td class="px-4 py-3 font-medium text-gray-800">{{ sp.product_name }}</td>
-                                    <td class="px-4 py-3 text-right font-mono">{{ fmt(sp.forecourt_stock, 0) }}</td>
-                                    <td class="px-4 py-3 text-right font-mono text-gray-500">{{ fmt(sp.store_stock, 0) }}</td>
-                                    <td class="px-4 py-3 text-right font-mono font-semibold">{{ fmt(sp.current_stock, 0) }}</td>
-                                    <td class="px-4 py-3 text-right font-mono">{{ fmt(sp.current_price) }}</td>
-                                    <td class="px-4 py-3 text-right font-mono text-gray-500">{{ sp.cost ? fmt(sp.cost) : '—' }}</td>
-                                    <td class="px-4 py-3">
-                                        <span class="px-2 py-0.5 text-xs rounded-full"
-                                            :class="sp.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'">
-                                            {{ sp.is_active ? 'Active' : 'Inactive' }}
-                                        </span>
-                                    </td>
-                                </tr>
-                                <tr v-if="!station.shop_products?.length">
-                                    <td colspan="7" class="px-4 py-6 text-center text-gray-400">No shop products configured.</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <!-- DataTables-style container -->
+                    <div class="bg-white border border-gray-300 rounded text-sm">
+
+                        <!-- Top bar: Show entries + Search -->
+                        <div class="flex flex-wrap justify-between items-center gap-3 px-4 py-3 border-b border-gray-200 bg-gray-50">
+                            <div class="flex items-center gap-1.5 text-gray-600">
+                                <span>Show</span>
+                                <select v-model="shopPerPage"
+                                    class="border border-gray-300 rounded px-1.5 py-0.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                                    <option :value="10">10</option>
+                                    <option :value="20">20</option>
+                                    <option :value="50">50</option>
+                                    <option :value="100">100</option>
+                                </select>
+                                <span>entries</span>
+                            </div>
+                            <div class="flex items-center gap-1.5 text-gray-600">
+                                <span>Search:</span>
+                                <input v-model="shopSearch" type="text"
+                                    class="border border-gray-300 rounded px-2 py-0.5 text-sm w-44 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                            </div>
+                        </div>
+
+                        <!-- Table -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-100 border-b-2 border-gray-300 text-left text-gray-700 font-semibold">
+                                        <th class="px-3 py-2.5 border-r border-gray-200">Item Name</th>
+                                        <th class="px-3 py-2.5 text-right border-r border-gray-200">Forecourt</th>
+                                        <th class="px-3 py-2.5 text-right border-r border-gray-200">Store</th>
+                                        <th class="px-3 py-2.5 text-right border-r border-gray-200">Total</th>
+                                        <th class="px-3 py-2.5 text-right border-r border-gray-200">Price</th>
+                                        <th class="px-3 py-2.5 text-right border-r border-gray-200">Cost</th>
+                                        <th class="px-3 py-2.5">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(sp, i) in shopProducts.data" :key="sp.id"
+                                        class="border-b border-gray-200 cursor-pointer hover:bg-blue-50"
+                                        :class="i % 2 === 1 ? 'bg-gray-50' : 'bg-white'"
+                                        @click="openEditShop(sp)">
+                                        <td class="px-3 py-2 font-medium text-gray-800 border-r border-gray-100">{{ sp.product_name }}</td>
+                                        <td class="px-3 py-2 text-right font-mono border-r border-gray-100">{{ fmt(sp.forecourt_stock, 0) }}</td>
+                                        <td class="px-3 py-2 text-right font-mono text-gray-500 border-r border-gray-100">{{ fmt(sp.store_stock, 0) }}</td>
+                                        <td class="px-3 py-2 text-right font-mono font-semibold border-r border-gray-100">{{ fmt(sp.current_stock, 0) }}</td>
+                                        <td class="px-3 py-2 text-right font-mono border-r border-gray-100">{{ fmt(sp.current_price) }}</td>
+                                        <td class="px-3 py-2 text-right font-mono text-gray-500 border-r border-gray-100">{{ sp.cost ? fmt(sp.cost) : '—' }}</td>
+                                        <td class="px-3 py-2">
+                                            <span class="px-2 py-0.5 text-xs rounded"
+                                                :class="sp.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'">
+                                                {{ sp.is_active ? 'Active' : 'Inactive' }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="!shopProducts.data?.length">
+                                        <td colspan="7" class="px-4 py-8 text-center text-gray-400 italic">
+                                            <template v-if="shopSearch">No matching records found.</template>
+                                            <template v-else>No shop products configured.</template>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Bottom bar: Showing X to Y + Pagination -->
+                        <div class="flex flex-wrap justify-between items-center gap-3 px-4 py-3 border-t border-gray-200 bg-gray-50">
+                            <span class="text-gray-600">
+                                <template v-if="shopProducts.total > 0">
+                                    Showing {{ shopProducts.from }} to {{ shopProducts.to }} of
+                                    {{ shopProducts.total }} entries
+                                    <span v-if="shopSearch" class="text-gray-400">(filtered)</span>
+                                </template>
+                                <template v-else>No entries found</template>
+                            </span>
+
+                            <div class="flex gap-0.5">
+                                <!-- Previous -->
+                                <span v-if="!shopProducts.prev_page_url"
+                                    class="px-3 py-1 border border-gray-300 rounded-l text-gray-400 bg-gray-100 cursor-default select-none">
+                                    Previous
+                                </span>
+                                <Link v-else :href="shopProducts.prev_page_url"
+                                    class="px-3 py-1 border border-gray-300 rounded-l text-gray-700 bg-white hover:bg-gray-100">
+                                    Previous
+                                </Link>
+
+                                <!-- Numbered pages -->
+                                <template v-for="link in shopPageLinks" :key="link.label">
+                                    <span v-if="!link.url"
+                                        class="px-3 py-1 border-t border-b border-gray-300 text-gray-400 bg-white select-none">
+                                        …
+                                    </span>
+                                    <span v-else-if="link.active"
+                                        class="px-3 py-1 border-t border-b border-blue-500 bg-blue-500 text-white cursor-default select-none">
+                                        {{ link.label }}
+                                    </span>
+                                    <Link v-else :href="link.url"
+                                        class="px-3 py-1 border-t border-b border-gray-300 text-gray-700 bg-white hover:bg-gray-100">
+                                        {{ link.label }}
+                                    </Link>
+                                </template>
+
+                                <!-- Next -->
+                                <span v-if="!shopProducts.next_page_url"
+                                    class="px-3 py-1 border border-gray-300 rounded-r text-gray-400 bg-gray-100 cursor-default select-none">
+                                    Next
+                                </span>
+                                <Link v-else :href="shopProducts.next_page_url"
+                                    class="px-3 py-1 border border-gray-300 rounded-r text-gray-700 bg-white hover:bg-gray-100">
+                                    Next
+                                </Link>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 
@@ -723,23 +921,10 @@ function salesTotal(sp) {
                     </div>
                 </div>
 
-                <!-- Sub-tabs -->
-                <div class="flex border-b border-gray-200 px-6 bg-gray-50">
-                    <button @click="shopModalTab = 'stock'"
-                        class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
-                        :class="shopModalTab === 'stock' ? 'border-orange-500 text-orange-500 bg-white' : 'border-transparent text-gray-500'">
-                        Stock / GRN
-                    </button>
-                    <button @click="shopModalTab = 'sales'"
-                        class="px-4 py-2 text-sm font-medium border-b-2 -mb-px"
-                        :class="shopModalTab === 'sales' ? 'border-orange-500 text-orange-500 bg-white' : 'border-transparent text-gray-500'">
-                        Sales
-                    </button>
-                </div>
 
                 <div class="overflow-y-auto flex-1 p-5">
-                    <!-- Stock tab -->
-                    <div v-if="shopModalTab === 'stock'" class="space-y-4">
+                    <!-- Stock / GRN -->
+                    <div class="space-y-4">
                         <!-- Item details form -->
                         <div class="grid grid-cols-2 gap-3">
                             <div class="col-span-2">
@@ -830,13 +1015,6 @@ function salesTotal(sp) {
                                             </td>
                                             <td></td>
                                         </tr>
-                                        <tr>
-                                            <td class="px-3 py-1.5" colspan="3">Sales (DSR)</td>
-                                            <td class="px-3 py-1.5 text-right font-mono">
-                                                {{ salesTotal(editingShopProduct) }}
-                                            </td>
-                                            <td></td>
-                                        </tr>
                                     </tfoot>
                                 </table>
                             </div>
@@ -859,8 +1037,13 @@ function salesTotal(sp) {
                                         class="w-full border rounded px-2 py-1.5 text-sm bg-white" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Qty *</label>
-                                    <input v-model="grnForm.quantity" type="number" step="1" min="1" required
+                                    <label class="block text-xs text-gray-600 mb-1">
+                                        Qty *
+                                        <span v-if="grnForm.type === 'adj'" class="text-gray-400 font-normal">(− to reduce)</span>
+                                    </label>
+                                    <input v-model="grnForm.quantity" type="number" step="1"
+                                        :min="grnForm.type === 'grn' ? 1 : undefined"
+                                        required
                                         class="w-full border rounded px-2 py-1.5 text-sm font-mono bg-white" placeholder="0" />
                                 </div>
                                 <div>
@@ -878,39 +1061,6 @@ function salesTotal(sp) {
                         </div>
                     </div>
 
-                    <!-- Sales tab -->
-                    <div v-if="shopModalTab === 'sales'">
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr class="bg-gray-50 text-xs font-semibold text-gray-500 uppercase">
-                                    <th class="px-3 py-2 text-left">DSR No.</th>
-                                    <th class="px-3 py-2 text-left">Date</th>
-                                    <th class="px-3 py-2 text-right">Sales Qty</th>
-                                    <th class="px-3 py-2 text-right">Price</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100">
-                                <tr v-for="sale in (editingShopProduct?.oil_sales ?? [])" :key="sale.id" class="hover:bg-gray-50">
-                                    <td class="px-3 py-1.5 font-mono text-xs text-gray-500">
-                                        {{ sale.shift?.daily_sales_record?.serial_number ?? '—' }}
-                                    </td>
-                                    <td class="px-3 py-1.5 text-xs">{{ fmtDate(sale.shift?.shift_date) }}</td>
-                                    <td class="px-3 py-1.5 text-right font-mono">{{ sale.quantity }}</td>
-                                    <td class="px-3 py-1.5 text-right font-mono">{{ fmt(sale.unit_price) }}</td>
-                                </tr>
-                                <tr v-if="!(editingShopProduct?.oil_sales ?? []).length">
-                                    <td colspan="4" class="px-3 py-4 text-center text-gray-400">No sales recorded</td>
-                                </tr>
-                            </tbody>
-                            <tfoot class="bg-gray-50 border-t text-xs font-semibold">
-                                <tr>
-                                    <td class="px-3 py-2" colspan="2">Sales</td>
-                                    <td class="px-3 py-2 text-right font-mono">{{ salesTotal(editingShopProduct) }}</td>
-                                    <td></td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
                 </div>
 
                 <!-- Footer actions -->

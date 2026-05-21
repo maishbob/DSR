@@ -17,19 +17,66 @@ class StationController extends Controller
     public function show(Request $request)
     {
         $station = $request->user()->station->load([
+            'owner',
             'products.priceHistories' => fn($q) => $q->orderByDesc('effective_from'),
             'products.tanks',
             'tanks.product',
             'pumpNozzles.product',
             'pumpNozzles.tank',
             'pumpNozzles.latestReading',
-            'shopProducts.stockTransactions.enteredBy',
-            'shopProducts.oilSales.shift.dailySalesRecord',
         ]);
 
+        $shopSearch  = trim($request->get('shop_search', ''));
+        $shopPerPage = in_array((int) $request->get('shop_per_page'), [10, 20, 50, 100])
+            ? (int) $request->get('shop_per_page')
+            : 20;
+
+        $shopProducts = ShopProduct::where('station_id', $station->id)
+            ->when($shopSearch, fn($q) => $q->where('product_name', 'like', "%{$shopSearch}%"))
+            ->with(['stockTransactions' => fn($q) => $q
+                ->with('enteredBy:id,name')
+                ->orderByDesc('trans_date')
+                ->orderByDesc('id')
+                ->limit(100),
+            ])
+            ->orderByRaw('is_active DESC')
+            ->orderBy('product_name')
+            ->paginate($shopPerPage)
+            ->withQueryString();
+
         return Inertia::render('Station/Settings', [
-            'station' => $station,
+            'station'      => $station,
+            'shopProducts' => $shopProducts,
+            'shopFilters'  => ['search' => $shopSearch, 'per_page' => $shopPerPage],
         ]);
+    }
+
+    // General settings
+    public function updateRates(Request $request)
+    {
+        $validated = $request->validate([
+            'vat_rate' => 'required|numeric|min:0|max:100',
+            'wht_rate' => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        $request->user()->station->update([
+            'vat_rate' => $validated['vat_rate'] / 100,
+            'wht_rate' => isset($validated['wht_rate']) ? $validated['wht_rate'] / 100 : null,
+        ]);
+
+        return back()->with('success', 'Tax rates updated.');
+    }
+
+    public function updatePeriod(Request $request)
+    {
+        $validated = $request->validate([
+            'period_from' => 'required|date',
+            'period_to'   => 'required|date|after_or_equal:period_from',
+        ]);
+
+        $request->user()->station->update($validated);
+
+        return back()->with('success', 'Billing period updated.');
     }
 
     // Products

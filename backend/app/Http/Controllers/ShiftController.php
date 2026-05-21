@@ -116,6 +116,8 @@ class ShiftController extends Controller
             'shift'              => $shift,
             'station'            => $station,
             'cashReconciliation' => $this->cashService->calculate($shift),
+            'cumulativeSales'     => $this->shiftService->getCumulativeSales($shift),
+            'cumulativePurchases' => $this->shiftService->getCumulativePurchases($shift),
         ]);
     }
 

@@ -91,6 +91,28 @@ class CardReconController extends Controller
         return back()->with('success', 'Transaction added.');
     }
 
+    public function updateLine(Request $request, CardReconLine $cardReconLine)
+    {
+        $recon = $cardReconLine->cardRecon;
+        abort_if(
+            DailySalesRecord::where('station_id', $recon->station_id)
+                ->whereDate('shift_date', $recon->recon_date)
+                ->where('locked', true)
+                ->exists(),
+            403,
+            'Cannot modify a card recon for a locked DSR period.'
+        );
+
+        $validated = $request->validate([
+            'trans_date' => 'required|date',
+            'ref'        => 'nullable|string|max:50',
+            'amount'     => 'required|numeric|min:0.01',
+        ]);
+
+        $cardReconLine->update($validated);
+        return back()->with('success', 'Transaction updated.');
+    }
+
     public function destroyLine(CardReconLine $cardReconLine)
     {
         $recon = $cardReconLine->cardRecon;

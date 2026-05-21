@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, Link } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { fmt } from '@/composables/useFormatters';
 
 const props = defineProps({
@@ -10,6 +10,40 @@ const props = defineProps({
 });
 
 const showForm = ref(false);
+
+// ── Client-side search & pagination ──────────────────────────
+const search      = ref('');
+const perPage     = ref(20);
+const currentPage = ref(1);
+
+watch([search, perPage], () => { currentPage.value = 1; });
+
+const filteredCustomers = computed(() => {
+    const q = search.value.toLowerCase();
+    if (!q) return props.customers ?? [];
+    return (props.customers ?? []).filter(c =>
+        c.customer_name.toLowerCase().includes(q) ||
+        (c.city  ?? '').toLowerCase().includes(q)  ||
+        (c.phone ?? '').toLowerCase().includes(q)
+    );
+});
+
+const lastPage = computed(() => Math.max(1, Math.ceil(filteredCustomers.value.length / perPage.value)));
+const from     = computed(() => filteredCustomers.value.length === 0 ? 0 : (currentPage.value - 1) * perPage.value + 1);
+const to       = computed(() => Math.min(currentPage.value * perPage.value, filteredCustomers.value.length));
+
+const pagedCustomers = computed(() =>
+    filteredCustomers.value.slice((currentPage.value - 1) * perPage.value, currentPage.value * perPage.value)
+);
+
+const pageLinks = computed(() => {
+    const total = lastPage.value;
+    const cur   = currentPage.value;
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    if (cur <= 4)         return [1, 2, 3, 4, 5, '…', total];
+    if (cur >= total - 3) return [1, '…', total-4, total-3, total-2, total-1, total];
+    return [1, '…', cur-1, cur, cur+1, '…', total];
+});
 
 const form = useForm({
     customer_name:            '',
@@ -131,48 +165,116 @@ function submit() {
             </form>
         </div>
 
-        <!-- Customers table -->
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-            <table class="w-full text-sm">
-                <thead class="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                        <th class="px-4 py-3 text-left text-gray-500 font-medium">Customer</th>
-                        <th class="px-4 py-3 text-left text-gray-500 font-medium">City</th>
-                        <th class="px-4 py-3 text-left text-gray-500 font-medium">Phone</th>
-                        <th class="px-4 py-3 text-right text-gray-500 font-medium">Credit Limit</th>
-                        <th class="px-4 py-3 text-right text-gray-500 font-medium">Running Balance</th>
-                        <th class="px-4 py-3 text-right text-gray-500 font-medium">Status</th>
-                        <th class="px-4 py-3"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="c in customers" :key="c.id" class="border-t border-gray-100 hover:bg-gray-50">
-                        <td class="px-4 py-3 font-medium text-gray-800">{{ c.customer_name }}</td>
-                        <td class="px-4 py-3 text-gray-500">{{ c.city ?? '—' }}</td>
-                        <td class="px-4 py-3 text-gray-600">{{ c.phone ?? '—' }}</td>
-                        <td class="px-4 py-3 text-right text-gray-600">{{ fmt(c.credit_limit) }}</td>
-                        <td class="px-4 py-3 text-right font-semibold"
-                            :class="c.balance > 0 ? 'text-red-600' : 'text-green-600'">
-                            {{ fmt(c.balance) }}
-                        </td>
-                        <td class="px-4 py-3 text-right">
-                            <span class="px-2 py-0.5 text-xs rounded-full"
-                                :class="c.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'">
-                                {{ c.is_active ? 'Active' : 'Inactive' }}
-                            </span>
-                        </td>
-                        <td class="px-4 py-3 text-right">
-                            <Link :href="route('credits.show', c.id)"
-                                class="text-orange-600 hover:underline text-xs font-medium">
-                                Statement →
-                            </Link>
-                        </td>
-                    </tr>
-                    <tr v-if="!customers?.length">
-                        <td colspan="7" class="px-4 py-10 text-center text-gray-400">No credit customers added yet.</td>
-                    </tr>
-                </tbody>
-            </table>
+        <!-- DataTables-style container -->
+        <div class="bg-white border border-gray-300 rounded text-sm">
+
+            <!-- Top bar -->
+            <div class="flex flex-wrap justify-between items-center gap-3 px-4 py-3 border-b border-gray-200 bg-gray-50">
+                <div class="flex items-center gap-1.5 text-gray-600">
+                    <span>Show</span>
+                    <select v-model="perPage"
+                        class="border border-gray-300 rounded px-1.5 py-0.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                        <option :value="10">10</option>
+                        <option :value="20">20</option>
+                        <option :value="50">50</option>
+                        <option :value="100">100</option>
+                    </select>
+                    <span>entries</span>
+                </div>
+                <div class="flex items-center gap-1.5 text-gray-600">
+                    <span>Search:</span>
+                    <input v-model="search" type="text"
+                        class="border border-gray-300 rounded px-2 py-0.5 text-sm w-44 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100 border-b-2 border-gray-300 text-left text-gray-700 font-semibold">
+                            <th class="px-3 py-2.5 border-r border-gray-200">Customer</th>
+                            <th class="px-3 py-2.5 border-r border-gray-200">City</th>
+                            <th class="px-3 py-2.5 border-r border-gray-200">Phone</th>
+                            <th class="px-3 py-2.5 text-right border-r border-gray-200">Credit Limit</th>
+                            <th class="px-3 py-2.5 text-right border-r border-gray-200">Balance</th>
+                            <th class="px-3 py-2.5 border-r border-gray-200">Status</th>
+                            <th class="px-3 py-2.5"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(c, i) in pagedCustomers" :key="c.id"
+                            class="border-b border-gray-200 hover:bg-blue-50"
+                            :class="i % 2 === 1 ? 'bg-gray-50' : 'bg-white'">
+                            <td class="px-3 py-2 font-medium text-gray-800 border-r border-gray-100">{{ c.customer_name }}</td>
+                            <td class="px-3 py-2 text-gray-500 border-r border-gray-100">{{ c.city ?? '—' }}</td>
+                            <td class="px-3 py-2 text-gray-600 border-r border-gray-100">{{ c.phone ?? '—' }}</td>
+                            <td class="px-3 py-2 text-right text-gray-600 border-r border-gray-100">{{ fmt(c.credit_limit) }}</td>
+                            <td class="px-3 py-2 text-right font-semibold border-r border-gray-100"
+                                :class="c.balance > 0 ? 'text-red-600' : 'text-green-600'">
+                                {{ fmt(c.balance) }}
+                            </td>
+                            <td class="px-3 py-2 border-r border-gray-100">
+                                <span class="px-2 py-0.5 text-xs rounded"
+                                    :class="c.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'">
+                                    {{ c.is_active ? 'Active' : 'Inactive' }}
+                                </span>
+                            </td>
+                            <td class="px-3 py-2 text-right">
+                                <Link :href="route('credits.show', c.id)"
+                                    class="text-orange-600 hover:underline text-xs font-medium">
+                                    Statement →
+                                </Link>
+                            </td>
+                        </tr>
+                        <tr v-if="!pagedCustomers.length">
+                            <td colspan="7" class="px-4 py-10 text-center text-gray-400 italic">
+                                <template v-if="search">No customers match "{{ search }}".</template>
+                                <template v-else>No credit customers added yet.</template>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Bottom bar -->
+            <div class="flex flex-wrap justify-between items-center gap-3 px-4 py-3 border-t border-gray-200 bg-gray-50">
+                <span class="text-gray-600">
+                    <template v-if="filteredCustomers.length > 0">
+                        Showing {{ from }} to {{ to }} of {{ filteredCustomers.length }} entries
+                        <span v-if="search" class="text-gray-400">(filtered from {{ customers.length }} total)</span>
+                    </template>
+                    <template v-else>No entries found</template>
+                </span>
+
+                <div class="flex gap-0.5">
+                    <button :disabled="currentPage === 1"
+                        @click="currentPage--"
+                        class="px-3 py-1 border border-gray-300 rounded-l text-sm"
+                        :class="currentPage === 1 ? 'text-gray-400 bg-gray-100 cursor-default' : 'text-gray-700 bg-white hover:bg-gray-100'">
+                        Previous
+                    </button>
+                    <template v-for="p in pageLinks" :key="p">
+                        <span v-if="p === '…'"
+                            class="px-3 py-1 border-t border-b border-gray-300 text-gray-400 bg-white select-none">
+                            …
+                        </span>
+                        <button v-else
+                            @click="currentPage = p"
+                            class="px-3 py-1 border-t border-b border-gray-300 text-sm"
+                            :class="currentPage === p ? 'bg-blue-500 border-blue-500 text-white cursor-default' : 'bg-white text-gray-700 hover:bg-gray-100'">
+                            {{ p }}
+                        </button>
+                    </template>
+                    <button :disabled="currentPage === lastPage"
+                        @click="currentPage++"
+                        class="px-3 py-1 border border-gray-300 rounded-r text-sm"
+                        :class="currentPage === lastPage ? 'text-gray-400 bg-gray-100 cursor-default' : 'text-gray-700 bg-white hover:bg-gray-100'">
+                        Next
+                    </button>
+                </div>
+            </div>
+
         </div>
     </AuthenticatedLayout>
 </template>

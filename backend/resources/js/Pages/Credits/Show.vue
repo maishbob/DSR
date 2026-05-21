@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import ConfirmModal from '@/Components/ConfirmModal.vue';
-import { Head, useForm, Link, router } from '@inertiajs/vue3';
+import { Head, useForm, Link, router, usePage } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 import { fmt, fmtDate } from '@/composables/useFormatters';
 
@@ -97,6 +97,11 @@ const closingBalance = computed(() => {
 });
 
 
+const page         = usePage();
+const stationName  = computed(() => page.props.currentStation?.station_name ?? '');
+
+function printPage() { window.print(); }
+
 const saleTypeLabel = { fuel: 'Fuel', oil: 'Oil', other: 'Other' };
 
 function deleteSale(row) {
@@ -129,7 +134,7 @@ function deleteSale(row) {
         </template>
 
         <!-- ── Customer details card ── -->
-        <div class="bg-white rounded-xl shadow-sm p-5 mb-5">
+        <div class="bg-white rounded-xl shadow-sm p-5 mb-5 print:hidden">
             <div class="flex items-start justify-between">
                 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-2 text-sm">
                     <div v-if="customer.contact">
@@ -181,7 +186,7 @@ function deleteSale(row) {
         </div>
 
         <!-- ── Summary strip ── -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5 print:hidden">
             <div class="bg-white rounded-xl shadow-sm p-4 border-l-4"
                 :class="closingBalance > 0 ? 'border-red-500' : 'border-green-500'">
                 <p class="text-xs text-gray-400">{{ from_date ? 'Period' : 'Running' }} Balance</p>
@@ -209,7 +214,7 @@ function deleteSale(row) {
         </div>
 
         <!-- ── Toolbar ── -->
-        <div class="flex flex-wrap items-end gap-3 mb-4">
+        <div class="flex flex-wrap items-end gap-3 mb-4 print:hidden">
             <!-- Date filter -->
             <div class="flex items-end gap-2 bg-white rounded-xl shadow-sm px-4 py-3">
                 <div>
@@ -234,6 +239,13 @@ function deleteSale(row) {
 
             <div class="flex-1"></div>
 
+            <button @click="printPage"
+                class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+                </svg>
+                Print
+            </button>
             <Link :href="route('payments.index')"
                 class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm hover:bg-gray-50">
                 All Payments
@@ -245,7 +257,7 @@ function deleteSale(row) {
         </div>
 
         <!-- ── Payment form ── -->
-        <div v-if="showPayment" class="bg-white rounded-xl shadow-sm p-5 mb-5">
+        <div v-if="showPayment" class="bg-white rounded-xl shadow-sm p-5 mb-5 print:hidden">
             <h2 class="font-semibold text-gray-700 mb-4">Record Payment</h2>
             <form @submit.prevent="submitPayment" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
@@ -312,6 +324,60 @@ function deleteSale(row) {
             </form>
         </div>
 
+        <!-- ── Print-only statement header ── -->
+        <div class="hidden print:block mb-6">
+            <div class="text-center mb-5">
+                <p class="text-base font-bold uppercase tracking-wide">{{ stationName }}</p>
+                <p class="text-lg font-bold mt-1">Account Statement</p>
+                <p v-if="from_date" class="text-sm mt-0.5">
+                    Period: {{ fmtDate(from_date) }} – {{ to_date ? fmtDate(to_date) : 'present' }}
+                </p>
+                <p v-else class="text-sm mt-0.5">All transactions to date</p>
+            </div>
+
+            <table class="w-full text-sm border border-gray-400 mb-5">
+                <tbody>
+                    <tr>
+                        <td class="px-3 py-1.5 w-32 text-gray-500 text-xs border-r border-b border-gray-300">Customer</td>
+                        <td class="px-3 py-1.5 font-bold border-b border-gray-300">{{ customer.customer_name }}</td>
+                        <td class="px-3 py-1.5 w-32 text-gray-500 text-xs border-r border-b border-gray-300 border-l">Credit Limit</td>
+                        <td class="px-3 py-1.5 border-b border-gray-300">KES {{ fmt(customer.credit_limit) }}</td>
+                    </tr>
+                    <tr v-if="customer.phone || customer.city">
+                        <td class="px-3 py-1.5 text-gray-500 text-xs border-r border-b border-gray-300">Phone / City</td>
+                        <td class="px-3 py-1.5 border-b border-gray-300">{{ [customer.phone, customer.city].filter(Boolean).join(' · ') || '—' }}</td>
+                        <td class="px-3 py-1.5 text-gray-500 text-xs border-r border-b border-gray-300 border-l">KRA PIN</td>
+                        <td class="px-3 py-1.5 font-mono border-b border-gray-300">{{ customer.pin || '—' }}</td>
+                    </tr>
+                    <tr v-if="customer.address || customer.vat_number">
+                        <td class="px-3 py-1.5 text-gray-500 text-xs border-r border-gray-300">Address</td>
+                        <td class="px-3 py-1.5">{{ customer.address || '—' }}</td>
+                        <td class="px-3 py-1.5 text-gray-500 text-xs border-r border-gray-300 border-l">VAT No.</td>
+                        <td class="px-3 py-1.5 font-mono">{{ customer.vat_number || '—' }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="grid grid-cols-4 gap-0 border border-gray-400 text-sm mb-5">
+                <div class="px-3 py-2 border-r border-gray-300">
+                    <p class="text-xs text-gray-500">Opening Balance</p>
+                    <p class="font-bold">KES {{ fmt(brought_forward) }}</p>
+                </div>
+                <div class="px-3 py-2 border-r border-gray-300">
+                    <p class="text-xs text-gray-500">Period Sales (Dr)</p>
+                    <p class="font-bold">KES {{ fmt(transactions.reduce((s,t) => s + (t.debit ?? 0), 0)) }}</p>
+                </div>
+                <div class="px-3 py-2 border-r border-gray-300">
+                    <p class="text-xs text-gray-500">Period Receipts (Cr)</p>
+                    <p class="font-bold">KES {{ fmt(transactions.reduce((s,t) => s + (t.credit ?? 0), 0)) }}</p>
+                </div>
+                <div class="px-3 py-2">
+                    <p class="text-xs text-gray-500">Closing Balance</p>
+                    <p class="font-bold">KES {{ fmt(Math.abs(closingBalance)) }} {{ closingBalance < 0 ? 'CR' : 'DR' }}</p>
+                </div>
+            </div>
+        </div>
+
         <!-- ── Statement ledger ── -->
         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
             <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -327,24 +393,24 @@ function deleteSale(row) {
                 <table class="w-full text-sm">
                     <thead class="bg-gray-50 border-b border-gray-200">
                         <tr>
-                            <th class="px-4 py-3 text-left text-gray-500 font-medium">Date</th>
-                            <th class="px-4 py-3 text-left text-gray-500 font-medium">Description</th>
-                            <th class="px-4 py-3 text-left text-gray-500 font-medium">Ref / DSR</th>
-                            <th class="px-4 py-3 text-right text-gray-500 font-medium">Qty</th>
-                            <th class="px-4 py-3 text-right text-gray-500 font-medium">Debit (KES)</th>
-                            <th class="px-4 py-3 text-right text-gray-500 font-medium">Credit (KES)</th>
-                            <th class="px-4 py-3 text-right text-gray-500 font-medium">Balance (KES)</th>
-                            <th class="px-4 py-3 w-8"></th>
+                            <th class="px-4 py-1.5 text-left text-gray-500 font-medium">Date</th>
+                            <th class="px-4 py-1.5 text-left text-gray-500 font-medium">Description</th>
+                            <th class="px-4 py-1.5 text-left text-gray-500 font-medium">Ref / DSR</th>
+                            <th class="px-4 py-1.5 text-right text-gray-500 font-medium">Qty</th>
+                            <th class="px-4 py-1.5 text-right text-gray-500 font-medium">Debit (KES)</th>
+                            <th class="px-4 py-1.5 text-right text-gray-500 font-medium">Credit (KES)</th>
+                            <th class="px-4 py-1.5 text-right text-gray-500 font-medium">Balance (KES)</th>
+                            <th class="px-4 py-3 w-8 print:hidden"></th>
                         </tr>
                     </thead>
                     <tbody>
                         <!-- Brought forward row -->
                         <tr class="bg-amber-50 border-b border-amber-200">
-                            <td class="px-4 py-2.5 text-gray-500 italic text-xs" colspan="3">
+                            <td class="px-4 py-1 text-gray-500 italic text-xs" colspan="3">
                                 {{ from_date ? 'Balance Brought Forward' : 'Opening Balance' }}
                             </td>
                             <td colspan="3"></td>
-                            <td class="px-4 py-2.5 text-right font-semibold text-gray-700">
+                            <td class="px-4 py-1 text-right font-semibold text-gray-700">
                                 {{ fmt(brought_forward) }}
                             </td>
                         </tr>
@@ -353,35 +419,35 @@ function deleteSale(row) {
                         <tr v-for="row in ledgerRows" :key="row.id"
                             class="border-t border-gray-100"
                             :class="row.type === 'payment' ? 'bg-green-50/40' : 'hover:bg-gray-50'">
-                            <td class="px-4 py-2.5 text-gray-600 whitespace-nowrap">{{ fmtDate(row.date) }}</td>
-                            <td class="px-4 py-2.5">
+                            <td class="px-4 py-1 text-gray-600 whitespace-nowrap">{{ fmtDate(row.date) }}</td>
+                            <td class="px-4 py-1">
                                 <span class="font-medium text-gray-800">{{ row.description }}</span>
                                 <span v-if="row.sale_type"
-                                    class="ml-1.5 px-1.5 py-0.5 text-xs rounded bg-orange-100 text-orange-700">
+                                    class="ml-1.5 px-1.5 py-0.5 text-xs rounded bg-orange-100 text-orange-700 print:hidden">
                                     {{ saleTypeLabel[row.sale_type] ?? row.sale_type }}
                                 </span>
                                 <span v-if="row.type === 'payment'"
-                                    class="ml-1.5 px-1.5 py-0.5 text-xs rounded bg-green-100 text-green-700">
+                                    class="ml-1.5 px-1.5 py-0.5 text-xs rounded bg-green-100 text-green-700 print:hidden">
                                     Receipt
                                 </span>
                             </td>
-                            <td class="px-4 py-2.5 text-gray-400 text-xs font-mono">{{ row.reference ?? '—' }}</td>
-                            <td class="px-4 py-2.5 text-right text-gray-500">
-                                <span v-if="row.quantity">{{ fmt(row.quantity, 3) }} L</span>
+                            <td class="px-4 py-1 text-gray-400 text-xs font-mono">{{ row.reference ?? '—' }}</td>
+                            <td class="px-4 py-1 text-right text-gray-500">
+                                <span v-if="row.quantity">{{ fmt(row.quantity, 1) }} L</span>
                                 <span v-else>—</span>
                             </td>
-                            <td class="px-4 py-2.5 text-right font-medium text-red-600">
+                            <td class="px-4 py-1 text-right font-medium text-red-600">
                                 {{ row.debit != null ? fmt(row.debit) : '—' }}
                             </td>
-                            <td class="px-4 py-2.5 text-right font-medium text-green-700">
+                            <td class="px-4 py-1 text-right font-medium text-green-700">
                                 {{ row.credit != null ? fmt(row.credit) : '—' }}
                             </td>
-                            <td class="px-4 py-2.5 text-right font-semibold"
+                            <td class="px-4 py-1 text-right font-semibold"
                                 :class="row.running > 0 ? 'text-red-700' : 'text-green-700'">
                                 {{ fmt(Math.abs(row.running)) }}
                                 <span class="text-xs font-normal ml-0.5">{{ row.running < 0 ? 'CR' : 'DR' }}</span>
                             </td>
-                            <td class="px-2 py-2.5 text-center">
+                            <td class="px-2 py-1 text-center print:hidden">
                                 <button v-if="row.type === 'sale'"
                                     @click="deleteSale(row)"
                                     class="text-gray-300 hover:text-red-500 transition-colors"
@@ -415,7 +481,7 @@ function deleteSale(row) {
                                 {{ fmt(Math.abs(closingBalance)) }}
                                 <span class="text-xs font-normal ml-0.5">{{ closingBalance < 0 ? 'CR' : 'DR' }}</span>
                             </td>
-                            <td></td>
+                            <td class="print:hidden"></td>
                         </tr>
                     </tbody>
                 </table>
@@ -424,7 +490,7 @@ function deleteSale(row) {
 
         <!-- ── Edit customer modal ── -->
         <div v-if="showEdit"
-            class="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
+            class="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto print:hidden">
             <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-8">
                 <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                     <h2 class="font-semibold text-gray-800">Edit Customer Details</h2>

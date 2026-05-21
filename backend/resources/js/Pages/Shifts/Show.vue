@@ -9,6 +9,8 @@ const props = defineProps({
     shift: Object,
     station: Object,
     cashReconciliation: Object,
+    cumulativeSales:     { type: Array, default: () => [] },
+    cumulativePurchases: { type: Array, default: () => [] },
 });
 
 // ── Tab management ────────────────────────────────────────────────────────────
@@ -23,6 +25,8 @@ const tabs = [
     { key: 'pos',      label: 'POS' },
     { key: 'expenses', label: 'Expenses' },
     { key: 'summary',  label: 'Summary' },
+    { key: 'cummsales',      label: 'Cumm. Sales' },
+    { key: 'cummpurchases',  label: 'Cumm. Purchases' },
 ];
 
 const isLocked  = computed(() => props.shift.status === 'locked');
@@ -560,6 +564,25 @@ const recon = computed(() => props.cashReconciliation ?? {});
 
 const cashVarianceStatus = computed(() => recon.value.variance_status ?? 'pending');
 
+// ── Cumulative Sales ──────────────────────────────────────────────────────────
+const cummSalesTotals = computed(() => {
+    const rows = props.cumulativeSales ?? [];
+    return {
+        bf:         rows.reduce((s, r) => s + r.bf,         0),
+        today:      rows.reduce((s, r) => s + r.today,      0),
+        cumulative: rows.reduce((s, r) => s + r.cumulative, 0),
+    };
+});
+
+const cummPurchasesTotals = computed(() => {
+    const rows = props.cumulativePurchases ?? [];
+    return {
+        bf:         rows.reduce((s, r) => s + r.bf,         0),
+        today:      rows.reduce((s, r) => s + r.today,      0),
+        cumulative: rows.reduce((s, r) => s + r.cumulative, 0),
+    };
+});
+
 const varianceClass = computed(() => ({
     ok:       'text-green-700 bg-green-50',
     warning:  'text-yellow-800 bg-yellow-50',
@@ -668,10 +691,10 @@ function generateDsr() {
 
                 <!-- Tabs -->
                 <div class="border-b border-gray-200 mb-0">
-                    <nav aria-label="Shift detail tabs" class="flex overflow-x-auto -mb-px scrollbar-none">
+                    <nav aria-label="Shift detail tabs" class="flex flex-wrap -mb-px">
                         <button v-for="tab in tabs" :key="tab.key"
                             @click="activeTab = tab.key"
-                            class="px-4 py-2 text-sm font-medium border-b-2 mr-1 transition-colors inline-flex items-center whitespace-nowrap flex-shrink-0"
+                            class="px-3 py-2 text-xs font-medium border-b-2 mr-0.5 mb-0 transition-colors inline-flex items-center whitespace-nowrap"
                             :class="activeTab === tab.key
                                 ? 'border-orange-500 text-orange-500'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'">
@@ -1378,10 +1401,10 @@ function generateDsr() {
                             <tbody class="divide-y divide-gray-100">
                                 <tr v-for="payment in (shift.card_payments ?? [])" :key="payment.id" class="hover:bg-gray-50">
                                     <td class="px-3 py-2 font-medium">{{ payment.card_name }}</td>
-                                    <td class="px-3 py-2 text-gray-500">{{ payment.trans_date }}</td>
+                                    <td class="px-3 py-2 text-gray-500">{{ fmtShiftDate(payment.trans_date) }}</td>
                                     <td class="px-3 py-2 font-mono text-xs">{{ payment.reference }}</td>
                                     <td class="px-3 py-2 text-right font-mono font-semibold">{{ fmt2(payment.amount) }}</td>
-                                    <td class="px-3 py-2 text-gray-400 text-xs">{{ payment.recon_date ?? '—' }}</td>
+                                    <td class="px-3 py-2 text-gray-400 text-xs">{{ fmtShiftDate(payment.recon_date) }}</td>
                                     <td class="px-3 py-2 font-mono text-xs text-gray-400">{{ payment.batch_ref ?? '—' }}</td>
                                     <td class="px-3 py-2">
                                         <button v-if="!isLocked" @click="deleteCard(payment.id)"
@@ -1733,6 +1756,78 @@ function generateDsr() {
                                     <p v-if="cashForm.errors.actual_cash" class="text-xs text-red-600">{{ cashForm.errors.actual_cash }}</p>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- ── Cumulative Purchases ─────────────────────────── -->
+                    <div v-show="activeTab === 'cummpurchases'">
+                        <div class="max-w-lg mx-auto">
+                            <p class="text-xs text-gray-400 mb-3">Month-to-date deliveries (litres) per product. Resets on the 1st of each month.</p>
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200">
+                                        <th class="py-2 text-left">Product</th>
+                                        <th class="py-2 text-right">B/Forward</th>
+                                        <th class="py-2 text-right">Today</th>
+                                        <th class="py-2 text-right">Cumulative</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <tr v-for="row in cumulativePurchases" :key="row.product_id" class="text-gray-700">
+                                        <td class="py-2 uppercase font-medium">{{ row.product_name }}</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt2(row.bf) }}</td>
+                                        <td class="py-2 text-right font-mono">{{ row.today > 0 ? fmt2(row.today) : '' }}</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt2(row.cumulative) }}</td>
+                                    </tr>
+                                    <tr v-if="!cumulativePurchases.length">
+                                        <td colspan="4" class="py-6 text-center text-gray-400 text-xs">No deliveries recorded.</td>
+                                    </tr>
+                                </tbody>
+                                <tfoot class="border-t-2 border-gray-300">
+                                    <tr class="font-bold text-gray-800">
+                                        <td class="py-2">Total</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt2(cummPurchasesTotals.bf) }}</td>
+                                        <td class="py-2 text-right font-mono">{{ cummPurchasesTotals.today > 0 ? fmt2(cummPurchasesTotals.today) : '' }}</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt2(cummPurchasesTotals.cumulative) }}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- ── Cumulative Sales ──────────────────────────────── -->
+                    <div v-show="activeTab === 'cummsales'">
+                        <div class="max-w-lg mx-auto">
+                            <p class="text-xs text-gray-400 mb-3">Month-to-date litres sold per product. Resets on the 1st of each month.</p>
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200">
+                                        <th class="py-2 text-left">Product</th>
+                                        <th class="py-2 text-right">B/Forward</th>
+                                        <th class="py-2 text-right">Today</th>
+                                        <th class="py-2 text-right">Cumulative</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <tr v-for="row in cumulativeSales" :key="row.product_id" class="text-gray-700">
+                                        <td class="py-2 uppercase font-medium">{{ row.product_name }}</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt2(row.bf) }}</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt2(row.today) }}</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt2(row.cumulative) }}</td>
+                                    </tr>
+                                    <tr v-if="!cumulativeSales.length">
+                                        <td colspan="4" class="py-6 text-center text-gray-400 text-xs">No meter readings recorded.</td>
+                                    </tr>
+                                </tbody>
+                                <tfoot class="border-t-2 border-gray-300">
+                                    <tr class="font-bold text-gray-800">
+                                        <td class="py-2">Total</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt2(cummSalesTotals.bf) }}</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt2(cummSalesTotals.today) }}</td>
+                                        <td class="py-2 text-right font-mono">{{ fmt2(cummSalesTotals.cumulative) }}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
                         </div>
                     </div>
 

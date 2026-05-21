@@ -7,6 +7,7 @@ use App\Models\Shift;
 use App\Services\AuditService;
 use App\Services\CashReconciliationService;
 use App\Services\DsrService;
+use App\Services\ShiftService;
 use App\Services\VarianceEngine;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +20,7 @@ class DsrController extends Controller
         private readonly VarianceEngine $varianceEngine,
         private readonly AuditService $audit,
         private readonly CashReconciliationService $cashService,
+        private readonly ShiftService $shiftService,
     ) {}
 
     public function index(Request $request)
@@ -104,6 +106,8 @@ class DsrController extends Controller
             'shift'              => $shift,
             'station'            => $station,
             'cashReconciliation' => $this->cashService->calculate($shift),
+            'cumulativeSales'     => $this->shiftService->getCumulativeSales($shift),
+            'cumulativePurchases' => $this->shiftService->getCumulativePurchases($shift),
         ]);
     }
 
